@@ -35,6 +35,7 @@ func runPicker(args []string) error {
 		fmt.Fprintln(os.Stderr, "no sessions found")
 		return nil
 	}
+	entries = attachRunningPIDs(entries, loadRunningSessionPIDs(sessionsDir()))
 
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].modTime.After(entries[j].modTime)
