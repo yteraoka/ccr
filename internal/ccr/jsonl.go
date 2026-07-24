@@ -54,7 +54,7 @@ func readSessionCwdAndLastTimestamp(path string) (cwd string, lastTimestamp time
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)

@@ -200,7 +200,7 @@ func readJSONLLines(path string) ([]rawLine, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	var lines []rawLine
 	scanner := bufio.NewScanner(f)
