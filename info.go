@@ -11,7 +11,7 @@ import (
 
 func runInfo(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: cc-resume info <session_id>")
+		return fmt.Errorf("usage: ccr info <session_id>")
 	}
 	sessionID := args[0]
 
@@ -20,16 +20,16 @@ func runInfo(args []string) error {
 		return err
 	}
 
-	cwd, timestamp, contents, err := parseSessionInfo(path)
+	cwd, timestamp, _, prompts, err := parseSessionInfo(path)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println(cwd)
 	fmt.Println(timestamp)
-	for _, c := range contents {
+	for _, p := range prompts {
 		fmt.Println()
-		fmt.Println(c)
+		fmt.Println(p)
 	}
 	return nil
 }
@@ -58,16 +58,17 @@ func findSessionFile(root, sessionID string) (string, error) {
 // parseSessionInfo scans a session JSONL file and extracts:
 //   - cwd: from the first line containing a non-empty "cwd" field
 //   - timestamp: the value of "timestamp" from the last line that has one
-//   - contents: message.content of up to the last 3 lines where
-//     type == "user" and origin.kind == "human"
-func parseSessionInfo(path string) (cwd string, timestamp string, contents []string, err error) {
+//   - aiTitle: the value of "aiTitle" from the last line where
+//     type == "ai-title"
+//   - prompts: lastPrompt from up to the last 3 lines where
+//     type == "last-prompt" (these lines have no timestamp of their own),
+//     collapsing consecutive repeats of the same value like uniq(1)
+func parseSessionInfo(path string) (cwd string, timestamp string, aiTitle string, prompts []string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 	defer f.Close()
-
-	var humanContents []string
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
@@ -87,19 +88,22 @@ func parseSessionInfo(path string) (cwd string, timestamp string, contents []str
 		if rec.Timestamp != "" {
 			timestamp = rec.Timestamp
 		}
-		if rec.IsHumanUser() {
-			if c, ok := rec.ContentString(); ok {
-				humanContents = append(humanContents, c)
+		if rec.Type == "ai-title" && rec.AiTitle != "" {
+			aiTitle = rec.AiTitle
+		}
+		if rec.Type == "last-prompt" && rec.LastPrompt != "" {
+			if len(prompts) == 0 || prompts[len(prompts)-1] != rec.LastPrompt {
+				prompts = append(prompts, rec.LastPrompt)
 			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 
-	if len(humanContents) > 3 {
-		humanContents = humanContents[len(humanContents)-3:]
+	if len(prompts) > 3 {
+		prompts = prompts[len(prompts)-3:]
 	}
 
-	return cwd, timestamp, humanContents, nil
+	return cwd, timestamp, aiTitle, prompts, nil
 }

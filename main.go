@@ -6,33 +6,30 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
-
 	var err error
-	switch os.Args[1] {
-	case "list":
+	switch {
+	case len(os.Args) < 2:
+		err = runPicker(nil)
+	case os.Args[1] == "list":
 		err = runList(os.Args[2:])
-	case "info":
+	case os.Args[1] == "info":
 		err = runInfo(os.Args[2:])
-	case "-h", "--help", "help":
+	case os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help":
 		printUsage()
 		return
 	default:
-		printUsage()
-		os.Exit(1)
+		err = runPicker(os.Args[1:])
 	}
 
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "cc-resume:", err)
+		fmt.Fprintln(os.Stderr, "ccr:", err)
 		os.Exit(1)
 	}
 }
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  cc-resume list [--timestamps]
-  cc-resume info <session_id>`)
+  ccr [-g]            interactive session picker (current project, or -g for every project)
+  ccr list [--timestamps]
+  ccr info <session_id>`)
 }
