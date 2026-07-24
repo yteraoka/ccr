@@ -17,8 +17,9 @@ Claude Code の session resume をどのディレクトリにいても実行で�
 最後の行の aiTitle の値(あれば)、`Size:` に session ファイルサイズを human
 readable 形式で、その後に `Prompts:` に続けて type = "last-prompt" の行の
 lastPrompt の値(同じ値が連続する場合は uniq(1) のように1つにまとめた上で
-最後から3件、この行には timestamp フィールドはありません)を行頭 `・` 付きで
-表示。1行が pane の幅に収まらない場合は切り詰めずに折り返します)を表示します。
+最後から3件、この行には timestamp フィールドはありません)を、prompt 間に空行を
+挟まず行頭 `·` 付きで表示。1行が pane の幅に収まらない場合は切り詰めずに
+折り返します)を表示します。
 カーソルキー
 (または j/k)で選択を移動し、Enter で選択したセッションの cwd に移動して
 exec で `claude --resume <session_id>` を実行します。移動先の cwd に `.envrc` が

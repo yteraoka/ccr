@@ -112,8 +112,8 @@ func (m pickerModel) View() string {
 	}
 
 	previewHeight := height / 3
-	if previewHeight < 5 {
-		previewHeight = 5
+	if previewHeight < 8 {
+		previewHeight = 8
 	}
 	listHeight := height - previewHeight - 1
 	if listHeight < 2 {
@@ -185,10 +185,7 @@ func previewView(cwd string, size int64, aiTitle string, prompts []string, err e
 			promptWidth = 1
 		}
 		indent := strings.Repeat(" ", bulletWidth)
-		for i, p := range prompts {
-			if i > 0 {
-				lines = append(lines, "")
-			}
+		for _, p := range prompts {
 			first := true
 			for _, l := range strings.Split(p, "\n") {
 				for _, wl := range wrap(l, promptWidth) {
