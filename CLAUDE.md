@@ -12,14 +12,16 @@ Claude Code の session resume をどのディレクトリにいても実行で�
 引数なしで `ccr` を実行すると、対象セッションを、jsonl 内で最後に見つかった
 `timestamp` フィールド(無ければファイルの mtime)の新しい順にソートし、
 ターミナルを上下 pane に分割したインタラクティブ picker を起動します。
-上 pane に `TIMESTAMP / SESSION ID / PID / CWD` の header 行と、それに続くセッション
+上 pane に `TIMESTAMP / SESSION ID / PID / CWD` の header 行、それに続くセッション
 一覧(上記の timestamp をローカルタイムで、session id、実行中セッションのみ pid、
-cwd の basename)、下 pane にカーソルで選択中の
+cwd の basename)、最下部に使用可能なキーの説明を1行で表示します。下 pane に
+カーソルで選択中の
 セッションのプレビュー(`Directory:` に cwd、`Title:` に type = "ai-title" の
 最後の行の aiTitle の値(あれば)、`Size:` に session ファイルサイズを human
 readable 形式で、続けて `Started:` / `Ended:` に jsonl 中で最初/最後に見つかった
 `timestamp` フィールド(UTC の ISO8601)をローカルタイムに変換して表示(値が
-見つからない場合はその行自体を表示しません)、その後に `Prompts:` に続けて
+見つからない場合はその行自体を表示しません)、`v` で既にサーバーが起動済みなら
+`Ended:` の直後に `Serving at: <url>` を表示、その後に `Prompts:` に続けて
 type = "last-prompt" の行の
 lastPrompt の値(同じ値が連続する場合は uniq(1) のように1つにまとめた上で
 最後から3件、この行には timestamp フィールドはありません)を、prompt 間に空行を
@@ -38,10 +40,9 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 HTML は `localhost` の 8000 番から順に listen 可能な port を探して起動する単一の
 HTTP サーバーが、リクエストパスの session id (`/<session_id>`)ごとにその場で
 レンダリングして返します(`v` を押すたびに新しいサーバーを起動するのではなく、
-初回押下時に起動した1つのサーバーを使い回します)。
-(サーバーは ccr プロセスが終了するまで動作し続けます。picker は終了しません。
-結果は一覧の下に1行のステータスとして表示されます)。q / Esc / Ctrl-C で何も
-実行せず終了します。
+初回押下時に起動した1つのサーバーを使い回します。サーバーは ccr プロセスが
+終了するまで動作し続けます)。picker は終了せず、エラーが起きた場合のみ一覧の下に
+1行のステータスとして表示されます。q / Esc / Ctrl-C で何も実行せず終了します。
 
 対象セッションの範囲:
 
