@@ -1,46 +1,21 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 )
-
-// Origin represents the "origin" field of a session JSONL record.
-type Origin struct {
-	Kind string `json:"kind"`
-}
-
-// Message represents the "message" field of a session JSONL record.
-type Message struct {
-	Role    string          `json:"role"`
-	Content json.RawMessage `json:"content"`
-}
 
 // Record represents a single line of a Claude Code session JSONL file.
 type Record struct {
-	Type      string   `json:"type"`
-	Message   *Message `json:"message,omitempty"`
-	Cwd       string   `json:"cwd,omitempty"`
-	Timestamp string   `json:"timestamp,omitempty"`
-	Origin    *Origin  `json:"origin,omitempty"`
-}
-
-// IsHumanUser reports whether this record is a user message typed by a human.
-func (r *Record) IsHumanUser() bool {
-	return r.Type == "user" && r.Origin != nil && r.Origin.Kind == "human"
-}
-
-// ContentString returns message.content as a string, when it is one.
-func (r *Record) ContentString() (string, bool) {
-	if r.Message == nil || len(r.Message.Content) == 0 {
-		return "", false
-	}
-	var s string
-	if err := json.Unmarshal(r.Message.Content, &s); err != nil {
-		return "", false
-	}
-	return s, true
+	Type       string `json:"type"`
+	Cwd        string `json:"cwd,omitempty"`
+	Timestamp  string `json:"timestamp,omitempty"`
+	LastPrompt string `json:"lastPrompt,omitempty"`
+	AiTitle    string `json:"aiTitle,omitempty"`
 }
 
 // configDir returns CLAUDE_CONFIG_DIR if set, otherwise ${HOME}/.claude.
@@ -58,4 +33,40 @@ func configDir() string {
 // projectsDir returns ${CLAUDE_CONFIG_DIR}/projects.
 func projectsDir() string {
 	return filepath.Join(configDir(), "projects")
+}
+
+var nonAlnumPattern = regexp.MustCompile(`[^a-zA-Z0-9]`)
+
+// encodeProjectDir converts a working directory path into the directory
+// name Claude Code uses for it under ${CLAUDE_CONFIG_DIR}/projects: every
+// character outside a-zA-Z0-9 becomes '-'.
+func encodeProjectDir(path string) string {
+	return nonAlnumPattern.ReplaceAllString(path, "-")
+}
+
+// readSessionCwd returns the cwd recorded in a session file, taken from the
+// first line that has a non-empty "cwd" field.
+func readSessionCwd(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var rec Record
+		if err := json.Unmarshal(line, &rec); err != nil {
+			continue
+		}
+		if rec.Cwd != "" {
+			return rec.Cwd, nil
+		}
+	}
+	return "", scanner.Err()
 }

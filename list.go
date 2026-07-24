@@ -13,6 +13,7 @@ import (
 type sessionEntry struct {
 	id      string
 	modTime time.Time
+	cwd     string
 }
 
 func runList(args []string) error {
@@ -32,17 +33,21 @@ func runList(args []string) error {
 	})
 
 	for _, e := range entries {
+		basename := ""
+		if e.cwd != "" {
+			basename = filepath.Base(e.cwd)
+		}
 		if *timestamps {
-			fmt.Printf("%s %s\n", e.modTime.Format("2006-01-02 15:04"), e.id)
+			fmt.Printf("%s %s %s\n", e.modTime.Format("2006-01-02 15:04"), e.id, basename)
 		} else {
-			fmt.Println(e.id)
+			fmt.Printf("%s %s\n", e.id, basename)
 		}
 	}
 	return nil
 }
 
 // collectSessions walks ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl
-// and returns one entry per session file found.
+// and returns one entry per session file found across every project directory.
 func collectSessions(root string) ([]sessionEntry, error) {
 	projectDirs, err := os.ReadDir(root)
 	if err != nil {
@@ -54,24 +59,38 @@ func collectSessions(root string) ([]sessionEntry, error) {
 		if !pd.IsDir() {
 			continue
 		}
-		projPath := filepath.Join(root, pd.Name())
-		files, err := os.ReadDir(projPath)
+		sub, err := collectSessionsInDir(filepath.Join(root, pd.Name()))
 		if err != nil {
 			continue
 		}
-		for _, f := range files {
-			if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
-				continue
-			}
-			info, err := f.Info()
-			if err != nil {
-				continue
-			}
-			entries = append(entries, sessionEntry{
-				id:      strings.TrimSuffix(f.Name(), ".jsonl"),
-				modTime: info.ModTime(),
-			})
+		entries = append(entries, sub...)
+	}
+	return entries, nil
+}
+
+// collectSessionsInDir returns one entry per <session_id>.jsonl file found
+// directly inside dir.
+func collectSessionsInDir(dir string) ([]sessionEntry, error) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []sessionEntry
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), ".jsonl") {
+			continue
 		}
+		info, err := f.Info()
+		if err != nil {
+			continue
+		}
+		cwd, _ := readSessionCwd(filepath.Join(dir, f.Name()))
+		entries = append(entries, sessionEntry{
+			id:      strings.TrimSuffix(f.Name(), ".jsonl"),
+			modTime: info.ModTime(),
+			cwd:     cwd,
+		})
 	}
 	return entries, nil
 }
