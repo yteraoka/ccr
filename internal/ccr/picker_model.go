@@ -16,9 +16,12 @@ import (
 var (
 	selectedRowStyle = lipgloss.NewStyle().Reverse(true)
 	headerRowStyle   = lipgloss.NewStyle().Bold(true).Underline(true)
+	legendStyle      = lipgloss.NewStyle().Faint(true)
 )
 
 const promptBullet = "·" // U+00B7 MIDDLE DOT, representable in Latin-1
+
+const keyLegend = "up/down/j/k: move   enter: resume   v: view transcript   q/esc/ctrl-c: quit"
 
 // pickerModel is the bubbletea model backing the interactive session
 // picker: the top pane lists sessions sorted by recency, the bottom pane
@@ -160,8 +163,9 @@ func formatRow(timestamp, id, pid, cwdBasename string) string {
 
 func listView(sessions []sessionEntry, cursor, height, width int) string {
 	header := headerRowStyle.Render(truncate(formatRow("TIMESTAMP", "SESSION ID", "PID", "CWD"), width))
+	legend := legendStyle.Render(truncate(keyLegend, width))
 
-	rowHeight := height - 1
+	rowHeight := height - 2 // header line + key legend line
 	if rowHeight < 0 {
 		rowHeight = 0
 	}
@@ -195,7 +199,7 @@ func listView(sessions []sessionEntry, cursor, height, width int) string {
 	for len(lines) < rowHeight {
 		lines = append(lines, "")
 	}
-	return header + "\n" + strings.Join(lines, "\n")
+	return header + "\n" + strings.Join(lines, "\n") + "\n" + legend
 }
 
 func previewView(cwd string, size int64, aiTitle string, prompts []string, start, end time.Time, servingURL string, err error, height, width int) string {

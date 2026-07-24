@@ -37,3 +37,17 @@ func TestPreviewViewNoServingURL(t *testing.T) {
 		t.Errorf("did not expect a Serving at: line when servingURL is empty: %s", got)
 	}
 }
+
+func TestListViewKeyLegendIsLastLine(t *testing.T) {
+	sessions := []sessionEntry{{id: "abc"}, {id: "def"}}
+	got := listView(sessions, 0, 10, 100)
+
+	lines := strings.Split(got, "\n")
+	if len(lines) != 10 {
+		t.Fatalf("got %d lines, want 10 (height budget): %q", len(lines), got)
+	}
+	last := lines[len(lines)-1]
+	if !strings.Contains(last, "move") || !strings.Contains(last, "quit") {
+		t.Errorf("last line = %q, want it to contain the key legend", last)
+	}
+}
