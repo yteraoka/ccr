@@ -29,14 +29,17 @@ type pickerModel struct {
 	width    int
 	height   int
 
-	previewID      string
-	previewCwd     string
-	previewSize    int64
-	previewAiTitle string
-	previewPrompts []string
-	previewStart   time.Time
-	previewEnd     time.Time
-	previewErr     error
+	previewID         string
+	previewCwd        string
+	previewSize       int64
+	previewAiTitle    string
+	previewPrompts    []string
+	previewStart      time.Time
+	previewEnd        time.Time
+	previewServingURL string
+	previewErr        error
+
+	statusMsg string
 
 	selected sessionEntry
 }
@@ -74,6 +77,14 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.selected = m.sessions[m.cursor]
 			return m, tea.Quit
+		case "v":
+			url, err := serveAndOpenTranscript(m.sessions[m.cursor].id)
+			m.previewServingURL = url
+			if err != nil {
+				m.statusMsg = "error: " + err.Error()
+			} else {
+				m.statusMsg = ""
+			}
 		}
 	}
 	return m, nil
@@ -83,6 +94,11 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // preview pane can show its directory, file size, and recent prompts.
 func (m *pickerModel) loadPreview() {
 	id := m.sessions[m.cursor].id
+	if url, ok := runningTranscriptServerURL(id); ok {
+		m.previewServingURL = url
+	} else {
+		m.previewServingURL = ""
+	}
 	if id == m.previewID {
 		return
 	}
@@ -127,14 +143,15 @@ func (m pickerModel) View() string {
 	if previewHeight < 8 {
 		previewHeight = 8
 	}
-	listHeight := height - previewHeight - 1
+	listHeight := height - previewHeight - 2 // separator line + status footer line
 	if listHeight < 2 {
 		listHeight = 2
 	}
 
 	return listView(m.sessions, m.cursor, listHeight, width) + "\n" +
 		strings.Repeat("─", width) + "\n" +
-		previewView(m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts, m.previewStart, m.previewEnd, m.previewErr, previewHeight, width)
+		previewView(m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts, m.previewStart, m.previewEnd, m.previewServingURL, m.previewErr, previewHeight, width) + "\n" +
+		truncate(m.statusMsg, width)
 }
 
 func formatRow(timestamp, id, pid, cwdBasename string) string {
@@ -181,7 +198,7 @@ func listView(sessions []sessionEntry, cursor, height, width int) string {
 	return header + "\n" + strings.Join(lines, "\n")
 }
 
-func previewView(cwd string, size int64, aiTitle string, prompts []string, start, end time.Time, err error, height, width int) string {
+func previewView(cwd string, size int64, aiTitle string, prompts []string, start, end time.Time, servingURL string, err error, height, width int) string {
 	if err != nil {
 		return truncate("error: "+err.Error(), width)
 	}
@@ -198,6 +215,9 @@ func previewView(cwd string, size int64, aiTitle string, prompts []string, start
 	}
 	if !end.IsZero() {
 		lines = append(lines, truncate("Ended:   "+end.Local().Format("2006-01-02 15:04:05"), width))
+	}
+	if servingURL != "" {
+		lines = append(lines, truncate("Serving at: "+servingURL, width))
 	}
 	if len(prompts) > 0 {
 		lines = append(lines, "", truncate("Prompts:", width))

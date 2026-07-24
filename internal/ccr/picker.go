@@ -107,3 +107,18 @@ func resumeSession(entry sessionEntry) error {
 
 	return syscall.Exec(argv0, args, os.Environ())
 }
+
+// serveAndOpenTranscript makes sessionID's jsonl viewable as a
+// self-contained HTML transcript on the shared local HTTP server and
+// opens it via $BROWSER. It returns the URL (valid even if opening the
+// browser failed) and any error encountered.
+func serveAndOpenTranscript(sessionID string) (string, error) {
+	url, err := serveTranscriptSession(sessionID)
+	if err != nil {
+		return "", err
+	}
+	if err := openInBrowser(url); err != nil {
+		return url, fmt.Errorf("started server but failed to open browser: %w", err)
+	}
+	return url, nil
+}
