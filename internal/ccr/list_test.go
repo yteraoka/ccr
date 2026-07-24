@@ -1,6 +1,11 @@
 package ccr
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
 
 func TestAttachRunningPIDs(t *testing.T) {
 	entries := []sessionEntry{
@@ -20,5 +25,55 @@ func TestAttachRunningPIDs(t *testing.T) {
 		if e.pid != want[e.id] {
 			t.Errorf("entry %s: pid = %d, want %d", e.id, e.pid, want[e.id])
 		}
+	}
+}
+
+func TestCollectSessionsInDirUsesLastTimestamp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "with-ts.jsonl")
+	content := `{"type":"user","cwd":"/tmp/proj","timestamp":"2020-01-01T00:00:00Z"}` + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// mtime is set far from the jsonl timestamp so the test can tell which
+	// one collectSessionsInDir actually picked.
+	future := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := collectSessionsInDir(dir)
+	if err != nil {
+		t.Fatalf("collectSessionsInDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+	want := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	if !entries[0].timestamp.Equal(want) {
+		t.Errorf("timestamp = %v, want %v (jsonl timestamp, not mtime)", entries[0].timestamp, want)
+	}
+}
+
+func TestCollectSessionsInDirFallsBackToMtime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "no-ts.jsonl")
+	if err := os.WriteFile(path, []byte(`{"type":"user","cwd":"/tmp/proj"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mtime := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := collectSessionsInDir(dir)
+	if err != nil {
+		t.Fatalf("collectSessionsInDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+	if !entries[0].timestamp.Equal(mtime) {
+		t.Errorf("timestamp = %v, want mtime %v", entries[0].timestamp, mtime)
 	}
 }

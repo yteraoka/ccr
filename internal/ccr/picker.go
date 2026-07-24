@@ -44,7 +44,7 @@ func RunPicker(args []string) error {
 	entries = attachRunningPIDs(entries, loadRunningSessionPIDs(sessionsDir()))
 
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].modTime.After(entries[j].modTime)
+		return entries[i].timestamp.After(entries[j].timestamp)
 	})
 
 	p := tea.NewProgram(newPickerModel(entries), tea.WithAltScreen())

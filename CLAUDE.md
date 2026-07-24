@@ -9,13 +9,18 @@ Claude Code の session resume をどのディレクトリにいても実行で�
 
 ## デフォルト動作(インタラクティブ picker)
 
-引数なしで `ccr` を実行すると、対象セッションを mtime の新しい順にソートし、
+引数なしで `ccr` を実行すると、対象セッションを、jsonl 内で最後に見つかった
+`timestamp` フィールド(無ければファイルの mtime)の新しい順にソートし、
 ターミナルを上下 pane に分割したインタラクティブ picker を起動します。
 上 pane に `TIMESTAMP / SESSION ID / PID / CWD` の header 行と、それに続くセッション
-一覧(timestamp、session id、実行中セッションのみ pid、cwd の basename)、下 pane にカーソルで選択中の
+一覧(上記の timestamp をローカルタイムで、session id、実行中セッションのみ pid、
+cwd の basename)、下 pane にカーソルで選択中の
 セッションのプレビュー(`Directory:` に cwd、`Title:` に type = "ai-title" の
 最後の行の aiTitle の値(あれば)、`Size:` に session ファイルサイズを human
-readable 形式で、その後に `Prompts:` に続けて type = "last-prompt" の行の
+readable 形式で、続けて `Started:` / `Ended:` に jsonl 中で最初/最後に見つかった
+`timestamp` フィールド(UTC の ISO8601)をローカルタイムに変換して表示(値が
+見つからない場合はその行自体を表示しません)、その後に `Prompts:` に続けて
+type = "last-prompt" の行の
 lastPrompt の値(同じ値が連続する場合は uniq(1) のように1つにまとめた上で
 最後から3件、この行には timestamp フィールドはありません)を、prompt 間に空行を
 挟まず行頭 `·` 付きで表示。1行が pane の幅に収まらない場合は切り詰めずに
