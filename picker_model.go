@@ -16,7 +16,7 @@ var (
 	headerRowStyle   = lipgloss.NewStyle().Bold(true).Underline(true)
 )
 
-const promptBullet = "・"
+const promptBullet = "·" // U+00B7 MIDDLE DOT, representable in Latin-1
 
 // pickerModel is the bubbletea model backing the interactive session
 // picker: the top pane lists sessions sorted by recency, the bottom pane
