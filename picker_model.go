@@ -94,7 +94,7 @@ func (m *pickerModel) loadPreview() {
 		m.previewErr, m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts = err, "", 0, "", nil
 		return
 	}
-	cwd, _, aiTitle, prompts, err := parseSessionInfo(path)
+	cwd, aiTitle, prompts, err := parseSessionInfo(path)
 	if err != nil {
 		m.previewErr, m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts = err, "", 0, "", nil
 		return

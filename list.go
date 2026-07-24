@@ -1,11 +1,8 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
@@ -14,36 +11,6 @@ type sessionEntry struct {
 	id      string
 	modTime time.Time
 	cwd     string
-}
-
-func runList(args []string) error {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
-	timestamps := fs.Bool("timestamps", false, "show timestamp alongside each session id")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	entries, err := collectSessions(projectsDir())
-	if err != nil {
-		return err
-	}
-
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].modTime.Before(entries[j].modTime)
-	})
-
-	for _, e := range entries {
-		basename := ""
-		if e.cwd != "" {
-			basename = filepath.Base(e.cwd)
-		}
-		if *timestamps {
-			fmt.Printf("%s %s %s\n", e.modTime.Format("2006-01-02 15:04"), e.id, basename)
-		} else {
-			fmt.Printf("%s %s\n", e.id, basename)
-		}
-	}
-	return nil
 }
 
 // collectSessions walks ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl

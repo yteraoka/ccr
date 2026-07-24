@@ -13,7 +13,6 @@ import (
 type Record struct {
 	Type       string `json:"type"`
 	Cwd        string `json:"cwd,omitempty"`
-	Timestamp  string `json:"timestamp,omitempty"`
 	LastPrompt string `json:"lastPrompt,omitempty"`
 	AiTitle    string `json:"aiTitle,omitempty"`
 }

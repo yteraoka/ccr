@@ -10,10 +10,6 @@ func main() {
 	switch {
 	case len(os.Args) < 2:
 		err = runPicker(nil)
-	case os.Args[1] == "list":
-		err = runList(os.Args[2:])
-	case os.Args[1] == "info":
-		err = runInfo(os.Args[2:])
 	case os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help":
 		printUsage()
 		return
@@ -29,7 +25,5 @@ func main() {
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  ccr [-g]            interactive session picker (current project, or -g for every project)
-  ccr list [--timestamps]
-  ccr info <session_id>`)
+  ccr [-g]            interactive session picker (current project, or -g for every project)`)
 }

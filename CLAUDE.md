@@ -15,9 +15,10 @@ Claude Code の session resume をどのディレクトリにいても実行で�
 一覧(timestamp、session id、cwd の basename)、下 pane にカーソルで選択中の
 セッションのプレビュー(`Directory:` に cwd、`Title:` に type = "ai-title" の
 最後の行の aiTitle の値(あれば)、`Size:` に session ファイルサイズを human
-readable 形式で、その後に `Prompts:` に続けて prompt(`info` と同じ抽出ロジックで
-最後の3件)を行頭 `・` 付きで表示。1行が pane の幅に収まらない場合は切り詰めずに
-折り返します)を表示します。
+readable 形式で、その後に `Prompts:` に続けて type = "last-prompt" の行の
+lastPrompt の値(同じ値が連続する場合は uniq(1) のように1つにまとめた上で
+最後から3件、この行には timestamp フィールドはありません)を行頭 `・` 付きで
+表示。1行が pane の幅に収まらない場合は切り詰めずに折り返します)を表示します。
 カーソルキー
 (または j/k)で選択を移動し、Enter で選択したセッションの cwd に移動して
 exec で `claude --resume <session_id>` を実行します。移動先の cwd に `.envrc` が
@@ -31,24 +32,3 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
   のみを対象にします。`<encoded_cwd>` はカレントディレクトリのうち
   `a-zA-Z0-9` 以外の文字をすべて `-` に置換したものです。
 - `ccr -g`: `projects` 配下の全ディレクトリを対象に全セッションをリストアップします。
-
-## list サブコマンド
-
-`ccr list` コマンドを実行すると `${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl`
-の `session_id cwd_basename` のリストを stdout に出力します。cwd_basename は
-そのセッションの cwd を `filepath.Base` したものです(空白区切り)。
-
-`ccr list --timestamps` コマンドを実行すると `timestamp session_id cwd_basename` の
-リストを stdout に出力します。timestamp は session ファイルの更新時刻で
-YYYY-MM-DD HH:MM とします。表示順は timestamp でソートします。
-
-## info サブコマンド
-
-`ccr info <session_id>` コマンドを実行すると
-`${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl` からファイルを見つけて
-json に `cwd` を含む最初の行から cwd の値を取得します。
-type = "last-prompt" の行の lastPrompt の値を取得します(この行には timestamp
-フィールドがありません)。同じ値が連続する場合は uniq(1) のように1つにまとめた上で
-最後から3つまでを取得します。
-最後の行の timestamp の値を取得します。
-stdout に cwd, timestamp, lastPrompt の値を出力します。複数の lastPrompt の値は空行を挟んで出力します。
