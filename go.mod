@@ -1,4 +1,4 @@
-module github.com/yteraoka/cc-resume
+module github.com/yteraoka/ccr
 
 go 1.26.5
 
