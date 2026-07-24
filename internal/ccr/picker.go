@@ -15,7 +15,8 @@ import (
 // PrintUsage prints command-line usage help to stderr.
 func PrintUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  ccr [-g]            interactive session picker (current project, or -g for every project)`)
+  ccr [-g]            interactive session picker (current project, or -g for every project)
+  ccr -v               print version and exit`)
 }
 
 // RunPicker implements the default ccr action: an interactive picker that
