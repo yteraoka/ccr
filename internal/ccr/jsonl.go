@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 )
 
 // Record represents a single line of a Claude Code session JSONL file.
@@ -15,6 +16,7 @@ type Record struct {
 	Cwd        string `json:"cwd,omitempty"`
 	LastPrompt string `json:"lastPrompt,omitempty"`
 	AiTitle    string `json:"aiTitle,omitempty"`
+	Timestamp  string `json:"timestamp,omitempty"`
 }
 
 // configDir returns CLAUDE_CONFIG_DIR if set, otherwise ${HOME}/.claude.
@@ -43,12 +45,14 @@ func encodeProjectDir(path string) string {
 	return nonAlnumPattern.ReplaceAllString(path, "-")
 }
 
-// readSessionCwd returns the cwd recorded in a session file, taken from the
-// first line that has a non-empty "cwd" field.
-func readSessionCwd(path string) (string, error) {
+// readSessionCwdAndLastTimestamp scans a session file and returns the cwd
+// recorded in the first line that has a non-empty "cwd" field, along with
+// the last successfully parsed "timestamp" field found in the file (zero
+// value if none found).
+func readSessionCwdAndLastTimestamp(path string) (cwd string, lastTimestamp time.Time, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	defer f.Close()
 
@@ -63,9 +67,14 @@ func readSessionCwd(path string) (string, error) {
 		if err := json.Unmarshal(line, &rec); err != nil {
 			continue
 		}
-		if rec.Cwd != "" {
-			return rec.Cwd, nil
+		if cwd == "" && rec.Cwd != "" {
+			cwd = rec.Cwd
+		}
+		if rec.Timestamp != "" {
+			if t, err := time.Parse(time.RFC3339, rec.Timestamp); err == nil {
+				lastTimestamp = t
+			}
 		}
 	}
-	return "", scanner.Err()
+	return cwd, lastTimestamp, scanner.Err()
 }

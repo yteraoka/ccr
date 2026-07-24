@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -33,6 +34,8 @@ type pickerModel struct {
 	previewSize    int64
 	previewAiTitle string
 	previewPrompts []string
+	previewStart   time.Time
+	previewEnd     time.Time
 	previewErr     error
 
 	selected sessionEntry
@@ -87,20 +90,28 @@ func (m *pickerModel) loadPreview() {
 
 	path, err := findSessionFile(projectsDir(), id)
 	if err != nil {
-		m.previewErr, m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts = err, "", 0, "", nil
+		m.resetPreview(err)
 		return
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		m.previewErr, m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts = err, "", 0, "", nil
+		m.resetPreview(err)
 		return
 	}
-	cwd, aiTitle, prompts, err := parseSessionInfo(path)
+	cwd, aiTitle, prompts, startTime, endTime, err := parseSessionInfo(path)
 	if err != nil {
-		m.previewErr, m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts = err, "", 0, "", nil
+		m.resetPreview(err)
 		return
 	}
 	m.previewErr, m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts = nil, cwd, info.Size(), aiTitle, prompts
+	m.previewStart, m.previewEnd = startTime, endTime
+}
+
+// resetPreview clears the preview pane state and records err (nil for "no
+// error, just nothing to show yet").
+func (m *pickerModel) resetPreview(err error) {
+	m.previewErr, m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts = err, "", 0, "", nil
+	m.previewStart, m.previewEnd = time.Time{}, time.Time{}
 }
 
 func (m pickerModel) View() string {
@@ -123,7 +134,7 @@ func (m pickerModel) View() string {
 
 	return listView(m.sessions, m.cursor, listHeight, width) + "\n" +
 		strings.Repeat("─", width) + "\n" +
-		previewView(m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts, m.previewErr, previewHeight, width)
+		previewView(m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts, m.previewStart, m.previewEnd, m.previewErr, previewHeight, width)
 }
 
 func formatRow(timestamp, id, pid, cwdBasename string) string {
@@ -158,7 +169,7 @@ func listView(sessions []sessionEntry, cursor, height, width int) string {
 		if s.pid != 0 {
 			pid = strconv.Itoa(s.pid)
 		}
-		line := truncate(formatRow(s.modTime.Format("2006-01-02 15:04"), s.id, pid, basename), width)
+		line := truncate(formatRow(s.timestamp.Local().Format("2006-01-02 15:04"), s.id, pid, basename), width)
 		if i == cursor {
 			line = selectedRowStyle.Render(line)
 		}
@@ -170,7 +181,7 @@ func listView(sessions []sessionEntry, cursor, height, width int) string {
 	return header + "\n" + strings.Join(lines, "\n")
 }
 
-func previewView(cwd string, size int64, aiTitle string, prompts []string, err error, height, width int) string {
+func previewView(cwd string, size int64, aiTitle string, prompts []string, start, end time.Time, err error, height, width int) string {
 	if err != nil {
 		return truncate("error: "+err.Error(), width)
 	}
@@ -182,6 +193,12 @@ func previewView(cwd string, size int64, aiTitle string, prompts []string, err e
 		lines = append(lines, truncate("Title: "+aiTitle, width))
 	}
 	lines = append(lines, truncate("Size: "+humanSize(size), width))
+	if !start.IsZero() {
+		lines = append(lines, truncate("Started: "+start.Local().Format("2006-01-02 15:04:05"), width))
+	}
+	if !end.IsZero() {
+		lines = append(lines, truncate("Ended:   "+end.Local().Format("2006-01-02 15:04:05"), width))
+	}
 	if len(prompts) > 0 {
 		lines = append(lines, "", truncate("Prompts:", width))
 		bulletWidth := runewidth.StringWidth(promptBullet)

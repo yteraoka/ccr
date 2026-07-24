@@ -8,10 +8,12 @@ import (
 )
 
 type sessionEntry struct {
-	id      string
-	modTime time.Time
-	cwd     string
-	pid     int // 0 if no live claude process is running this session
+	id string
+	// timestamp is the last "timestamp" found in the session's jsonl file,
+	// falling back to the file's mtime when the jsonl has none.
+	timestamp time.Time
+	cwd       string
+	pid       int // 0 if no live claude process is running this session
 }
 
 // collectSessions walks ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl
@@ -63,11 +65,15 @@ func collectSessionsInDir(dir string) ([]sessionEntry, error) {
 		if err != nil {
 			continue
 		}
-		cwd, _ := readSessionCwd(filepath.Join(dir, f.Name()))
+		cwd, lastTimestamp, _ := readSessionCwdAndLastTimestamp(filepath.Join(dir, f.Name()))
+		timestamp := lastTimestamp
+		if timestamp.IsZero() {
+			timestamp = info.ModTime()
+		}
 		entries = append(entries, sessionEntry{
-			id:      strings.TrimSuffix(f.Name(), ".jsonl"),
-			modTime: info.ModTime(),
-			cwd:     cwd,
+			id:        strings.TrimSuffix(f.Name(), ".jsonl"),
+			timestamp: timestamp,
+			cwd:       cwd,
 		})
 	}
 	return entries, nil

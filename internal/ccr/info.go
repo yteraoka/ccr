@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // findSessionFile locates ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl
@@ -37,10 +38,12 @@ func findSessionFile(root, sessionID string) (string, error) {
 //   - prompts: lastPrompt from up to the last 3 lines where
 //     type == "last-prompt", collapsing consecutive repeats of the same
 //     value like uniq(1)
-func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string, err error) {
+//   - startTime/endTime: parsed from the first and last lines (in file
+//     order) with a valid "timestamp" field; zero value if none found
+func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string, startTime, endTime time.Time, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", nil, time.Time{}, time.Time{}, err
 	}
 	defer f.Close()
 
@@ -67,14 +70,22 @@ func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string
 				prompts = append(prompts, rec.LastPrompt)
 			}
 		}
+		if rec.Timestamp != "" {
+			if t, err := time.Parse(time.RFC3339, rec.Timestamp); err == nil {
+				if startTime.IsZero() {
+					startTime = t
+				}
+				endTime = t
+			}
+		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", "", nil, err
+		return "", "", nil, time.Time{}, time.Time{}, err
 	}
 
 	if len(prompts) > 3 {
 		prompts = prompts[len(prompts)-3:]
 	}
 
-	return cwd, aiTitle, prompts, nil
+	return cwd, aiTitle, prompts, startTime, endTime, nil
 }
