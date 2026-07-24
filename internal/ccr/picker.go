@@ -1,4 +1,4 @@
-package main
+package ccr
 
 import (
 	"flag"
@@ -12,12 +12,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// runPicker implements the default ccr action: an interactive picker that
+// PrintUsage prints command-line usage help to stderr.
+func PrintUsage() {
+	fmt.Fprintln(os.Stderr, `usage:
+  ccr [-g]            interactive session picker (current project, or -g for every project)`)
+}
+
+// RunPicker implements the default ccr action: an interactive picker that
 // lists sessions (scoped to the current project unless -g is given), shows
 // a live cwd/message preview of the highlighted one, and resumes into the
 // selected session on Enter by cd-ing into its cwd and exec-ing
 // `claude --resume <session_id>`.
-func runPicker(args []string) error {
+func RunPicker(args []string) error {
 	fs := flag.NewFlagSet("ccr", flag.ExitOnError)
 	global := fs.Bool("g", false, "list sessions from every project, not just the current directory")
 	if err := fs.Parse(args); err != nil {

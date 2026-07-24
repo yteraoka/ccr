@@ -3,27 +3,24 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/yteraoka/ccr/internal/ccr"
 )
 
 func main() {
 	var err error
 	switch {
 	case len(os.Args) < 2:
-		err = runPicker(nil)
+		err = ccr.RunPicker(nil)
 	case os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help":
-		printUsage()
+		ccr.PrintUsage()
 		return
 	default:
-		err = runPicker(os.Args[1:])
+		err = ccr.RunPicker(os.Args[1:])
 	}
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ccr:", err)
 		os.Exit(1)
 	}
-}
-
-func printUsage() {
-	fmt.Fprintln(os.Stderr, `usage:
-  ccr [-g]            interactive session picker (current project, or -g for every project)`)
 }
