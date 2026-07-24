@@ -11,8 +11,8 @@ Claude Code の session resume をどのディレクトリにいても実行で�
 
 引数なしで `ccr` を実行すると、対象セッションを mtime の新しい順にソートし、
 ターミナルを上下 pane に分割したインタラクティブ picker を起動します。
-上 pane に `TIMESTAMP / SESSION ID / CWD` の header 行と、それに続くセッション
-一覧(timestamp、session id、cwd の basename)、下 pane にカーソルで選択中の
+上 pane に `TIMESTAMP / SESSION ID / PID / CWD` の header 行と、それに続くセッション
+一覧(timestamp、session id、実行中セッションのみ pid、cwd の basename)、下 pane にカーソルで選択中の
 セッションのプレビュー(`Directory:` に cwd、`Title:` に type = "ai-title" の
 最後の行の aiTitle の値(あれば)、`Size:` に session ファイルサイズを human
 readable 形式で、その後に `Prompts:` に続けて type = "last-prompt" の行の
@@ -33,3 +33,13 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
   のみを対象にします。`<encoded_cwd>` はカレントディレクトリのうち
   `a-zA-Z0-9` 以外の文字をすべて `-` に置換したものです。
 - `ccr -g`: `projects` 配下の全ディレクトリを対象に全セッションをリストアップします。
+
+## 実行中セッションの検出
+
+`${CLAUDE_CONFIG_DIR}/sessions/<pid>.json` には、実行中またはクリーンに終了
+されなかった claude プロセスの情報 (`pid` と `sessionId` を含む) が記録されて
+います。ccr はセッション一覧を作成する前にこれらのファイルを読み込み、記載
+された `pid` のプロセスが実際に存在し `claude` であることを確認します。存在
+しない、または `claude` プロセスでなかった場合はそのファイルの情報を無視し
+ます(ファイル自体は削除しません)。有効と判定できたセッション ID について
+は、一覧の PID 列に対応するプロセスの pid を表示します。

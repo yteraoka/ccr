@@ -11,6 +11,7 @@ type sessionEntry struct {
 	id      string
 	modTime time.Time
 	cwd     string
+	pid     int // 0 if no live claude process is running this session
 }
 
 // collectSessions walks ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl
@@ -33,6 +34,16 @@ func collectSessions(root string) ([]sessionEntry, error) {
 		entries = append(entries, sub...)
 	}
 	return entries, nil
+}
+
+// attachRunningPIDs sets pid on every entry whose id has a matching live
+// claude process in pids (sessionID -> pid, as returned by
+// loadRunningSessionPIDs).
+func attachRunningPIDs(entries []sessionEntry, pids map[string]int) []sessionEntry {
+	for i := range entries {
+		entries[i].pid = pids[entries[i].id]
+	}
+	return entries
 }
 
 // collectSessionsInDir returns one entry per <session_id>.jsonl file found

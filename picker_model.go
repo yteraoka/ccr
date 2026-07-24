@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -125,12 +126,12 @@ func (m pickerModel) View() string {
 		previewView(m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts, m.previewErr, previewHeight, width)
 }
 
-func formatRow(timestamp, id, cwdBasename string) string {
-	return fmt.Sprintf("%-16s  %-36s  %s", timestamp, id, cwdBasename)
+func formatRow(timestamp, id, pid, cwdBasename string) string {
+	return fmt.Sprintf("%-16s  %-36s  %7s  %s", timestamp, id, pid, cwdBasename)
 }
 
 func listView(sessions []sessionEntry, cursor, height, width int) string {
-	header := headerRowStyle.Render(truncate(formatRow("TIMESTAMP", "SESSION ID", "CWD"), width))
+	header := headerRowStyle.Render(truncate(formatRow("TIMESTAMP", "SESSION ID", "PID", "CWD"), width))
 
 	rowHeight := height - 1
 	if rowHeight < 0 {
@@ -153,7 +154,11 @@ func listView(sessions []sessionEntry, cursor, height, width int) string {
 		if s.cwd != "" {
 			basename = filepath.Base(s.cwd)
 		}
-		line := truncate(formatRow(s.modTime.Format("2006-01-02 15:04"), s.id, basename), width)
+		pid := ""
+		if s.pid != 0 {
+			pid = strconv.Itoa(s.pid)
+		}
+		line := truncate(formatRow(s.modTime.Format("2006-01-02 15:04"), s.id, pid, basename), width)
 		if i == cursor {
 			line = selectedRowStyle.Render(line)
 		}
