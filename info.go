@@ -9,31 +9,6 @@ import (
 	"path/filepath"
 )
 
-func runInfo(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: ccr info <session_id>")
-	}
-	sessionID := args[0]
-
-	path, err := findSessionFile(projectsDir(), sessionID)
-	if err != nil {
-		return err
-	}
-
-	cwd, timestamp, _, prompts, err := parseSessionInfo(path)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(cwd)
-	fmt.Println(timestamp)
-	for _, p := range prompts {
-		fmt.Println()
-		fmt.Println(p)
-	}
-	return nil
-}
-
 // findSessionFile locates ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl
 // by searching every project directory for a matching file name.
 func findSessionFile(root, sessionID string) (string, error) {
@@ -57,16 +32,15 @@ func findSessionFile(root, sessionID string) (string, error) {
 
 // parseSessionInfo scans a session JSONL file and extracts:
 //   - cwd: from the first line containing a non-empty "cwd" field
-//   - timestamp: the value of "timestamp" from the last line that has one
 //   - aiTitle: the value of "aiTitle" from the last line where
 //     type == "ai-title"
 //   - prompts: lastPrompt from up to the last 3 lines where
-//     type == "last-prompt" (these lines have no timestamp of their own),
-//     collapsing consecutive repeats of the same value like uniq(1)
-func parseSessionInfo(path string) (cwd string, timestamp string, aiTitle string, prompts []string, err error) {
+//     type == "last-prompt", collapsing consecutive repeats of the same
+//     value like uniq(1)
+func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", nil, err
 	}
 	defer f.Close()
 
@@ -85,9 +59,6 @@ func parseSessionInfo(path string) (cwd string, timestamp string, aiTitle string
 		if cwd == "" && rec.Cwd != "" {
 			cwd = rec.Cwd
 		}
-		if rec.Timestamp != "" {
-			timestamp = rec.Timestamp
-		}
 		if rec.Type == "ai-title" && rec.AiTitle != "" {
 			aiTitle = rec.AiTitle
 		}
@@ -98,12 +69,12 @@ func parseSessionInfo(path string) (cwd string, timestamp string, aiTitle string
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", "", "", nil, err
+		return "", "", nil, err
 	}
 
 	if len(prompts) > 3 {
 		prompts = prompts[len(prompts)-3:]
 	}
 
-	return cwd, timestamp, aiTitle, prompts, nil
+	return cwd, aiTitle, prompts, nil
 }
