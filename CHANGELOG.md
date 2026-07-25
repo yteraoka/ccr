@@ -11,6 +11,7 @@
 - Update actions/checkout action to v7.0.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/22
 - Update Songmu/tagpr action to v1.20.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/23
 - Update golangci/golangci-lint-action digest to ba0d7d2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/25
+- Update actions/setup-go action to v7 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/26
 
 ## [v0.0.1](https://github.com/yteraoka/ccr/commits/v0.0.1) - 2026-07-24
 
