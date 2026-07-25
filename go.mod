@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/charmbracelet/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/mattn/go-runewidth v0.0.27
 	github.com/yuin/goldmark v1.8.4
