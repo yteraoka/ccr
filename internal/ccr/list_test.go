@@ -28,6 +28,36 @@ func TestAttachRunningPIDs(t *testing.T) {
 	}
 }
 
+func TestCollectSessionsMissingRoot(t *testing.T) {
+	if _, err := collectSessions(filepath.Join(t.TempDir(), "does-not-exist")); err == nil {
+		t.Fatal("expected an error when the root directory doesn't exist")
+	}
+}
+
+func TestCollectSessionsSkipsUnreadableProjectDir(t *testing.T) {
+	root := t.TempDir()
+	// A file (not a directory) alongside a real project dir: collectSessions
+	// should skip it via the IsDir() check rather than erroring.
+	if err := os.WriteFile(filepath.Join(root, "not-a-dir"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	projDir := filepath.Join(root, "project")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "session.jsonl"), []byte(`{"type":"user","cwd":"/tmp"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := collectSessions(root)
+	if err != nil {
+		t.Fatalf("collectSessions: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+}
+
 func TestCollectSessionsInDirUsesLastTimestamp(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "with-ts.jsonl")

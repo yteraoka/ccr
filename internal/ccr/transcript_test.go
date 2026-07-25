@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParseTranscript(t *testing.T) {
@@ -62,6 +63,64 @@ func TestParseTranscript(t *testing.T) {
 	e3 := entries[3]
 	if e3.role != "assistant" || len(e3.blocks) != 1 || e3.blocks[0].kind != "text" || e3.blocks[0].text != "hello" {
 		t.Fatalf("entry 3 = %+v, want single text block \"hello\"", e3)
+	}
+}
+
+func TestReadJSONLLinesFileNotFound(t *testing.T) {
+	if _, err := readJSONLLines(filepath.Join(t.TempDir(), "missing.jsonl")); err == nil {
+		t.Fatal("expected an error for a missing file")
+	}
+}
+
+func TestReadJSONLLinesSkipsBlankAndInvalidLines(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	content := "\n" + `{"type":"user"}` + "\n" + "not json\n" + "   \n" + `{"type":"assistant"}` + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lines, err := readJSONLLines(path)
+	if err != nil {
+		t.Fatalf("readJSONLLines: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2 (blank/invalid skipped): %+v", len(lines), lines)
+	}
+	if lines[0].Type != "user" || lines[1].Type != "assistant" {
+		t.Errorf("got %+v, want user then assistant", lines)
+	}
+}
+
+func TestParseAssistantLineInvalidMessage(t *testing.T) {
+	raw := rawLine{Type: "assistant", Message: []byte(`not json`)}
+	_, ok := parseAssistantLine(raw, time.Time{}, nil)
+	if ok {
+		t.Error("expected parseAssistantLine to fail on invalid message JSON")
+	}
+}
+
+func TestParseAssistantLineInvalidContent(t *testing.T) {
+	raw := rawLine{Type: "assistant", Message: []byte(`{"content":"not an array"}`)}
+	_, ok := parseAssistantLine(raw, time.Time{}, nil)
+	if ok {
+		t.Error("expected parseAssistantLine to fail when content isn't a block array")
+	}
+}
+
+func TestParseUserLineInvalidMessage(t *testing.T) {
+	raw := rawLine{Type: "user", Message: []byte(`not json`)}
+	_, ok := parseUserLine(raw, time.Time{})
+	if ok {
+		t.Error("expected parseUserLine to fail on invalid message JSON")
+	}
+}
+
+func TestParseUserLineEmptyText(t *testing.T) {
+	raw := rawLine{Type: "user", Message: []byte(`""`)}
+	_, ok := parseUserLine(raw, time.Time{})
+	if ok {
+		t.Error("expected parseUserLine to skip empty-text user lines")
 	}
 }
 
