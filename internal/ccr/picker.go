@@ -9,7 +9,7 @@ import (
 	"sort"
 	"syscall"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // PrintUsage prints command-line usage help to stderr.
@@ -48,7 +48,7 @@ func RunPicker(args []string) error {
 		return entries[i].timestamp.After(entries[j].timestamp)
 	})
 
-	p := tea.NewProgram(newPickerModel(entries), tea.WithAltScreen())
+	p := tea.NewProgram(newPickerModel(entries))
 	res, err := p.Run()
 	if err != nil {
 		return err

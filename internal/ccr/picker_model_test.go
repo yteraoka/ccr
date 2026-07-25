@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestPreviewViewServingURLAfterEnded(t *testing.T) {
@@ -111,7 +112,7 @@ func TestViewProducesListAndPreview(t *testing.T) {
 	setupPreviewFixture(t, "session-a", "/tmp/proj-a")
 	m := newPickerModel([]sessionEntry{{id: "session-a"}})
 
-	got := m.View()
+	got := ansi.Strip(m.View().Content)
 	if !strings.Contains(got, "SESSION ID") {
 		t.Errorf("View() = %q, want the list header", got)
 	}
@@ -177,20 +178,20 @@ func TestUpdateWindowSizeMsg(t *testing.T) {
 func TestUpdateCursorMovement(t *testing.T) {
 	m := pickerModel{sessions: []sessionEntry{{id: "a"}, {id: "b"}, {id: "c"}}}
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	pm := updated.(pickerModel)
 	if pm.cursor != 1 {
 		t.Fatalf("cursor after down = %d, want 1", pm.cursor)
 	}
 
-	updated, _ = pm.Update(tea.KeyMsg{Type: tea.KeyUp})
+	updated, _ = pm.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	pm = updated.(pickerModel)
 	if pm.cursor != 0 {
 		t.Fatalf("cursor after up = %d, want 0", pm.cursor)
 	}
 
 	// up at the top stays at 0
-	updated, _ = pm.Update(tea.KeyMsg{Type: tea.KeyUp})
+	updated, _ = pm.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	pm = updated.(pickerModel)
 	if pm.cursor != 0 {
 		t.Errorf("cursor after up at top = %d, want 0", pm.cursor)
@@ -198,7 +199,7 @@ func TestUpdateCursorMovement(t *testing.T) {
 
 	// down past the bottom stays at len-1
 	for i := 0; i < 5; i++ {
-		updated, _ = pm.Update(tea.KeyMsg{Type: tea.KeyDown})
+		updated, _ = pm.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		pm = updated.(pickerModel)
 	}
 	if pm.cursor != 2 {
@@ -208,7 +209,7 @@ func TestUpdateCursorMovement(t *testing.T) {
 
 func TestUpdateEnterSelectsAndQuits(t *testing.T) {
 	m := pickerModel{sessions: []sessionEntry{{id: "a"}, {id: "b"}}, cursor: 1}
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	pm := updated.(pickerModel)
 	if pm.selected.id != "b" {
 		t.Errorf("selected.id = %q, want %q", pm.selected.id, "b")
@@ -222,10 +223,10 @@ func TestUpdateEnterSelectsAndQuits(t *testing.T) {
 }
 
 func TestUpdateQuitKeys(t *testing.T) {
-	for _, key := range []tea.KeyMsg{
-		{Type: tea.KeyCtrlC},
-		{Type: tea.KeyEsc},
-		{Type: tea.KeyRunes, Runes: []rune{'q'}},
+	for _, key := range []tea.KeyPressMsg{
+		{Code: 'c', Mod: tea.ModCtrl},
+		{Code: tea.KeyEsc},
+		{Code: 'q'},
 	} {
 		m := pickerModel{sessions: []sessionEntry{{id: "a"}}}
 		_, cmd := m.Update(key)
@@ -301,7 +302,7 @@ func TestLoadPreviewUpdatesOnCursorMove(t *testing.T) {
 		t.Fatalf("initial previewCwd = %q, want /tmp/proj-a", m.previewCwd)
 	}
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	pm := updated.(pickerModel)
 	if pm.previewCwd != "/tmp/proj-b" {
 		t.Errorf("previewCwd after moving cursor = %q, want /tmp/proj-b", pm.previewCwd)
