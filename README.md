@@ -2,18 +2,41 @@
 
 [日本語](README.ja.md)
 
-`ccr` is a small CLI tool that lets you resume a [Claude Code](https://claude.com/claude-code)
-session from any directory. It shows an interactive picker of your past
-sessions, then `cd`s into the session's original working directory and
-`exec`s `claude --resume <session_id>` in place of itself.
+`ccr` is a small CLI tool written in Go that lets you resume a
+[Claude Code](https://claude.com/claude-code) session from any directory.
+It shows an interactive picker of your past sessions, then `cd`s into the
+selected session's original working directory and replaces itself via
+`exec` with `claude --resume <session_id>`.
 
-## Requirements
+Session files are looked up under the `CLAUDE_CONFIG_DIR` environment
+variable, or `$HOME/.claude` if it isn't set.
 
-- Go 1.26.5 (a `mise.toml` pinning this version is included; run `mise install` if you use [mise](https://mise.jdx.dev/))
-- The `claude` CLI available on `PATH`
-- [direnv](https://direnv.net/) (optional) — if the session's directory has a `.envrc`, `ccr` resumes through `direnv exec` so its environment is loaded
+By default only sessions for the current directory are listed; pass `-g`
+to also list sessions from other directories.
+
+`ai-title` and `last-prompt` information from the session file is shown
+as well.
+
+Typing `v` in the list renders the session as HTML and opens it in your
+web browser.
 
 ## Installation
+
+### Homebrew
+
+```bash
+brew tap yteraoka/cask
+brew trust yteraoka/cask
+brew install --cask ccr
+```
+
+### mise
+
+```bash
+mise use -g github:yteraoka/ccr@0.0.1
+```
+
+### Go
 
 ```sh
 go install github.com/yteraoka/ccr/cmd/ccr@latest
@@ -27,30 +50,31 @@ go build -o ccr ./cmd/ccr
 
 ## Usage
 
-Run `ccr` with no arguments from any directory:
-
-```sh
+```bash
 ccr
 ```
 
-By default, only sessions belonging to the current directory are listed
-(matched the same way Claude Code encodes `${CLAUDE_CONFIG_DIR}/projects/<dir>`
-— every character outside `a-zA-Z0-9` in the cwd becomes `-`). Pass `-g` to
-list sessions from every project instead:
+OR
 
-```sh
+```bash
 ccr -g
 ```
+
+By default, only sessions belonging to the current directory are targeted
+(matched the same way Claude Code encodes `${CLAUDE_CONFIG_DIR}/projects/<dir>`
+— every character outside `a-zA-Z0-9` in the cwd becomes `-`). Adding `-g`
+targets sessions from every project instead.
 
 The terminal splits into two panes:
 
 - **Top pane** — sessions sorted by recency (most recently active first),
-  with columns `TIMESTAMP` (local time), `SESSION ID`, `PID` (only shown for
-  sessions with a currently running `claude` process — see below), and
-  `CWD` (basename). The bottom line of this pane shows the available keys.
+  with columns `TIMESTAMP` (local time), `SESSION ID`, `PID` (only shown
+  for sessions with a currently running `claude` process — see below),
+  and `CWD` (basename). The bottom line of this pane shows the available
+  keys.
 - **Bottom pane** — a live preview of the highlighted session: directory,
-  title (if Claude Code has generated one), file size, start/end time, and
-  the last few prompts you sent in that session.
+  title (if Claude Code has generated one), file size, start/end time,
+  and the last few prompts you sent in that session.
 
 ### Keybindings
 
@@ -65,6 +89,7 @@ The terminal splits into two panes:
 
 - `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`.
 - `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument.
+- If a `.envrc` file exists in the destination directory, it is loaded via `direnv exec`.
 
 ## Viewing a full transcript (`v`)
 

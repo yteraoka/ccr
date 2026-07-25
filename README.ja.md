@@ -3,18 +3,38 @@
 [English](README.md)
 
 `ccr` は、どのディレクトリにいても [Claude Code](https://claude.com/claude-code)
-の session resume を実行できる小さな CLI ツールです。過去のセッション一覧を
-インタラクティブな picker で表示し、選択したセッションの元の working
-directory に `cd` してから、自分自身を `claude --resume <session_id>` に
+の session resume を実行できる Go 言語で書かれた小さな CLI ツールです。
+過去のセッション一覧をインタラクティブな picker で表示し、選択したセッションの
+元の working directory に `cd` してから、自分自身を `claude --resume <session_id>` に
 `exec` で置き換えます。
 
-## 必要なもの
+session ファイルは環境変数 `CLAUDE_CONFIG_DIR` か `$HOME/.claude` から探します。
 
-- Go 1.26.5(このバージョンを固定した `mise.toml` を用意しています。[mise](https://mise.jdx.dev/) を使っていれば `mise install` で導入できます)
-- `PATH` 上の `claude` CLI
-- [direnv](https://direnv.net/)(任意)— セッションのディレクトリに `.envrc` がある場合、`ccr` は `direnv exec` を経由して resume するのでその環境が読み込まれます
+デフォルトではカレントディレクトリでの session のみをリストアップしますが、
+`-g` オプションを指定すると他のディレクトリの session もリストアップします。
+
+session ファイルから `ai-title` や `last-prompt` の情報も表示されます。
+
+リスト上で `v` をタイプすると HTML に変換した session の情報をウェブブラウザで
+確認することができます。
 
 ## インストール
+
+### Homebrew
+
+```bash
+brew tap yteraoka/cask
+brew trust yteraoka/cask
+brew install --cask ccr
+```
+
+### mise
+
+```bash
+mise use -g github:yteraoka/ccr@0.0.1
+```
+
+### Go
 
 ```sh
 go install github.com/yteraoka/ccr/cmd/ccr@latest
@@ -28,20 +48,20 @@ go build -o ccr ./cmd/ccr
 
 ## 使い方
 
-どのディレクトリからでも引数なしで実行します:
-
-```sh
+```bash
 ccr
+```
+
+OR
+
+```bash
+ccr -g
 ```
 
 デフォルトではカレントディレクトリに紐づくセッションのみを対象にします
 (Claude Code が `${CLAUDE_CONFIG_DIR}/projects/<dir>` を作る際と同じ規則で、
 cwd のうち `a-zA-Z0-9` 以外の文字をすべて `-` に置換して照合します)。
 `-g` を付けると全プロジェクトのセッションを対象にします:
-
-```sh
-ccr -g
-```
 
 ターミナルは上下2つの pane に分割されます:
 
@@ -68,6 +88,7 @@ ccr -g
 - `BROWSER` — トランスクリプトビューア(後述)を開くコマンド。一般的な慣習に従い、
   いずれかの単語に `%s` が含まれていればそこに URL を埋め込み、無ければ最後の
   引数として URL を追加します。
+- Change Directory 先に .envrc ファイルが存在した場合は direnv exec を使って読み込みます。
 
 ## セッション全文の表示(`v` キー)
 
