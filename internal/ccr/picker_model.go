@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -63,7 +63,7 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
@@ -133,7 +133,7 @@ func (m *pickerModel) resetPreview(err error) {
 	m.previewStart, m.previewEnd = time.Time{}, time.Time{}
 }
 
-func (m pickerModel) View() string {
+func (m pickerModel) View() tea.View {
 	width, height := m.width, m.height
 	if width <= 0 {
 		width = 80
@@ -151,10 +151,14 @@ func (m pickerModel) View() string {
 		listHeight = 2
 	}
 
-	return listView(m.sessions, m.cursor, listHeight, width) + "\n" +
+	content := listView(m.sessions, m.cursor, listHeight, width) + "\n" +
 		strings.Repeat("─", width) + "\n" +
 		previewView(m.previewCwd, m.previewSize, m.previewAiTitle, m.previewPrompts, m.previewStart, m.previewEnd, m.previewServingURL, m.previewErr, previewHeight, width) + "\n" +
 		truncate(m.statusMsg, width)
+
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
 }
 
 func formatRow(timestamp, id, pid, cwdBasename string) string {
