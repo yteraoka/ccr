@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.0.2](https://github.com/yteraoka/ccr/compare/v0.0.1...v0.0.2) - 2026-07-25
+
+- Rename homebrew tap repository to homebrew-cask by @yteraoka in https://github.com/yteraoka/ccr/pull/24
+- Update README.ja.md and sync English translation by @yteraoka in https://github.com/yteraoka/ccr/pull/29
+- Run go test on pull requests by @yteraoka in https://github.com/yteraoka/ccr/pull/30
+- Increase test coverage (54% -> 84%) by @yteraoka in https://github.com/yteraoka/ccr/pull/31
+- Update module github.com/mattn/go-runewidth to v0.0.27 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/16
+- Update module github.com/charmbracelet/bubbletea to v2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/17
+- Update actions/checkout action to v7.0.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/22
+- Update Songmu/tagpr action to v1.20.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/23
+- Update golangci/golangci-lint-action digest to ba0d7d2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/25
+
 ## [v0.0.1](https://github.com/yteraoka/ccr/commits/v0.0.1) - 2026-07-24
 
 - Rename command to ccr and add an interactive session picker by @yteraoka in https://github.com/yteraoka/ccr/pull/1
