@@ -34,6 +34,80 @@ func TestParseSessionInfoTimestamps(t *testing.T) {
 	}
 }
 
+func TestParseSessionInfoAiTitleAndPrompts(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	content := `{"type":"user","cwd":"/tmp/proj"}
+{"type":"ai-title","aiTitle":"First Title"}
+{"type":"ai-title","aiTitle":"Latest Title"}
+{"type":"last-prompt","lastPrompt":"one"}
+{"type":"last-prompt","lastPrompt":"one"}
+{"type":"last-prompt","lastPrompt":"two"}
+{"type":"last-prompt","lastPrompt":"three"}
+{"type":"last-prompt","lastPrompt":"four"}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, aiTitle, prompts, _, _, err := parseSessionInfo(path)
+	if err != nil {
+		t.Fatalf("parseSessionInfo: %v", err)
+	}
+	if cwd != "/tmp/proj" {
+		t.Errorf("cwd = %q, want /tmp/proj", cwd)
+	}
+	if aiTitle != "Latest Title" {
+		t.Errorf("aiTitle = %q, want the last ai-title line's value", aiTitle)
+	}
+	want := []string{"two", "three", "four"}
+	if len(prompts) != len(want) {
+		t.Fatalf("prompts = %v, want %v", prompts, want)
+	}
+	for i := range want {
+		if prompts[i] != want[i] {
+			t.Errorf("prompts[%d] = %q, want %q", i, prompts[i], want[i])
+		}
+	}
+}
+
+func TestFindSessionFileFound(t *testing.T) {
+	root := t.TempDir()
+	projDir := filepath.Join(root, "some-project")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(projDir, "session-a.jsonl")
+	if err := os.WriteFile(target, []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := findSessionFile(root, "session-a")
+	if err != nil {
+		t.Fatalf("findSessionFile: %v", err)
+	}
+	if got != target {
+		t.Errorf("findSessionFile = %q, want %q", got, target)
+	}
+}
+
+func TestFindSessionFileNotFound(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "some-project"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := findSessionFile(root, "does-not-exist"); err == nil {
+		t.Fatal("expected an error for a missing session file")
+	}
+}
+
+func TestFindSessionFileMissingRoot(t *testing.T) {
+	if _, err := findSessionFile(filepath.Join(t.TempDir(), "does-not-exist"), "session-a"); err == nil {
+		t.Fatal("expected an error when the root directory doesn't exist")
+	}
+}
+
 func TestParseSessionInfoNoTimestamps(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")

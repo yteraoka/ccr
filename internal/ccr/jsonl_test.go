@@ -31,6 +31,25 @@ func TestReadSessionCwdAndLastTimestamp(t *testing.T) {
 	}
 }
 
+func TestConfigDirUsesEnvVarWhenSet(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", "/custom/config")
+	if got := configDir(); got != "/custom/config" {
+		t.Errorf("configDir() = %q, want /custom/config", got)
+	}
+}
+
+func TestConfigDirFallsBackToHomeClaudeDir(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home dir available: %v", err)
+	}
+	want := filepath.Join(home, ".claude")
+	if got := configDir(); got != want {
+		t.Errorf("configDir() = %q, want %q", got, want)
+	}
+}
+
 func TestReadSessionCwdAndLastTimestampNoTimestamp(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")

@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+func TestSessionsDir(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", "/custom/config")
+	want := filepath.Join("/custom/config", "sessions")
+	if got := sessionsDir(); got != want {
+		t.Errorf("sessionsDir() = %q, want %q", got, want)
+	}
+}
+
 func TestParsePidFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "123.json")

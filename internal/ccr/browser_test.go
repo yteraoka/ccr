@@ -162,6 +162,24 @@ func TestServeTranscriptSessionUnknownSessionIs404(t *testing.T) {
 	}
 }
 
+func TestRunningTranscriptServerURLAfterServed(t *testing.T) {
+	setupFixtureSession(t, "55555555-5555-5555-5555-555555555555", "hello")
+	baseURL, err := serveTranscriptSession("55555555-5555-5555-5555-555555555555")
+	if err != nil {
+		t.Fatalf("serveTranscriptSession: %v", err)
+	}
+
+	url, ok := runningTranscriptServerURL("66666666-6666-6666-6666-666666666666")
+	if !ok {
+		t.Fatal("expected the shared server to already be running")
+	}
+	base := baseURL[:strings.LastIndex(baseURL, "/")]
+	want := base + "/66666666-6666-6666-6666-666666666666"
+	if url != want {
+		t.Errorf("runningTranscriptServerURL = %q, want %q", url, want)
+	}
+}
+
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
