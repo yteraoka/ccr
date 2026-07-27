@@ -22,10 +22,61 @@ func withStartCommandStub(t *testing.T) *[]string {
 	return &captured
 }
 
+// withFallbackOpenerStub replaces fallbackOpenerArgv for the duration of
+// the test and restores the original afterwards, so tests don't depend on
+// the real runtime.GOOS of the machine running them.
+func withFallbackOpenerStub(t *testing.T, argv []string) {
+	t.Helper()
+	orig := fallbackOpenerArgv
+	t.Cleanup(func() { fallbackOpenerArgv = orig })
+
+	fallbackOpenerArgv = func() []string {
+		return append([]string(nil), argv...)
+	}
+}
+
 func TestOpenInBrowserUnset(t *testing.T) {
 	t.Setenv("BROWSER", "")
+	// Pin "no platform fallback" so this test is deterministic regardless
+	// of the OS actually running `go test` (e.g. a contributor's Mac,
+	// where a real fallback is now available).
+	withFallbackOpenerStub(t, nil)
+
 	if err := openInBrowser("http://localhost:8000/"); err == nil {
-		t.Fatal("expected error when BROWSER is unset")
+		t.Fatal("expected error when BROWSER is unset and there is no fallback opener")
+	}
+}
+
+func TestOpenInBrowserFallsBackOnMacOSWhenUnset(t *testing.T) {
+	t.Setenv("BROWSER", "")
+	withFallbackOpenerStub(t, []string{"open"})
+	captured := withStartCommandStub(t)
+
+	if err := openInBrowser("http://localhost:8000/"); err != nil {
+		t.Fatalf("openInBrowser: %v", err)
+	}
+	want := []string{"open", "http://localhost:8000/"}
+	if !equalSlices(*captured, want) {
+		t.Errorf("argv = %v, want %v", *captured, want)
+	}
+}
+
+func TestFallbackOpenerArgvFor(t *testing.T) {
+	cases := []struct {
+		goos string
+		want []string
+	}{
+		{"darwin", []string{"open"}},
+		{"linux", nil},
+		{"windows", nil},
+	}
+	for _, c := range cases {
+		t.Run(c.goos, func(t *testing.T) {
+			got := fallbackOpenerArgvFor(c.goos)
+			if !equalSlices(got, c.want) {
+				t.Errorf("fallbackOpenerArgvFor(%q) = %v, want %v", c.goos, got, c.want)
+			}
+		})
 	}
 }
 

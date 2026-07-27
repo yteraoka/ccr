@@ -104,6 +104,9 @@ func TestPrintUsage(t *testing.T) {
 func TestServeAndOpenTranscriptOpenBrowserFails(t *testing.T) {
 	setupFixtureSession(t, "77777777-7777-7777-7777-777777777777", "hello")
 	t.Setenv("BROWSER", "")
+	// Without this, running on a real Mac would actually shell out to
+	// `open <url>` and succeed, falsifying this test's premise.
+	withFallbackOpenerStub(t, nil)
 
 	url, err := serveAndOpenTranscript("77777777-7777-7777-7777-777777777777")
 	if url == "" {

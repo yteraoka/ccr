@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -106,18 +107,42 @@ var startCommand = func(argv []string) error {
 	return exec.Command(argv[0], argv[1:]...).Start()
 }
 
+// fallbackOpenerArgvFor returns the argv of the platform default command
+// that can open a URL when $BROWSER is not set, for the given GOOS value,
+// or nil if there is no supported fallback for that platform.
+func fallbackOpenerArgvFor(goos string) []string {
+	switch goos {
+	case "darwin":
+		return []string{"open"}
+	default:
+		return nil
+	}
+}
+
+// fallbackOpenerArgv returns the argv of the current platform's fallback
+// URL opener, or nil if none is available. It's a package variable — like
+// isClaudeProcess in running.go and startCommand above — so tests can
+// stub the platform behavior instead of depending on the real
+// runtime.GOOS of whichever machine happens to run the tests.
+var fallbackOpenerArgv = func() []string {
+	return fallbackOpenerArgvFor(runtime.GOOS)
+}
+
 // openInBrowser opens url using the $BROWSER command, following the
 // common convention: if any whitespace-separated token in $BROWSER
 // contains "%s", url is substituted there; otherwise url is appended as
 // the final argument.
+//
+// If $BROWSER is unset or empty, it falls back to the platform's default
+// opener when one is available (currently just macOS's "open" command);
+// if none is available for the current platform, it returns an error.
 func openInBrowser(url string) error {
-	browser := os.Getenv("BROWSER")
-	if browser == "" {
-		return fmt.Errorf("BROWSER environment variable is not set")
-	}
-	argv := strings.Fields(browser)
+	argv := strings.Fields(os.Getenv("BROWSER"))
 	if len(argv) == 0 {
-		return fmt.Errorf("BROWSER environment variable is empty")
+		argv = fallbackOpenerArgv()
+	}
+	if len(argv) == 0 {
+		return fmt.Errorf("BROWSER environment variable is not set and no fallback browser opener is available for this platform")
 	}
 
 	substituted := false

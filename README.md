@@ -88,7 +88,7 @@ The terminal splits into two panes:
 ### Environment variables
 
 - `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`.
-- `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument.
+- `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument. If `BROWSER` is unset, macOS falls back to opening the URL with `open`; on other platforms, an error is shown instead.
 - If a `.envrc` file exists in the destination directory, it is loaded via `direnv exec`.
 
 ## Viewing a full transcript (`v`)
