@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.0.3](https://github.com/yteraoka/ccr/compare/v0.0.2...v0.0.3) - 2026-07-27
+
+- Fall back to macOS `open` when $BROWSER is unset by @yteraoka in https://github.com/yteraoka/ccr/pull/33
+
 ## [v0.0.2](https://github.com/yteraoka/ccr/compare/v0.0.1...v0.0.2) - 2026-07-25
 
 - Rename homebrew tap repository to homebrew-cask by @yteraoka in https://github.com/yteraoka/ccr/pull/24
