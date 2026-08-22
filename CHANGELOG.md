@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.4](https://github.com/yteraoka/ccr/compare/v0.0.3...v0.0.4) - 2026-08-22
+
+- Update module github.com/yuin/goldmark to v1.8.5 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/35
+- Update module charm.land/lipgloss/v2 to v2.0.6 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/36
+- golangci-lint を mise で管理し 2.13.1 に更新 by @yteraoka in https://github.com/yteraoka/ccr/pull/43
+- Update dependency go to v1.27.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/38
+- Update module github.com/mattn/go-runewidth to v0.0.28 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/39
+- Update module charm.land/bubbletea/v2 to v2.0.9 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/40
+
 ## [v0.0.3](https://github.com/yteraoka/ccr/compare/v0.0.2...v0.0.3) - 2026-07-27
 
 - Fall back to macOS `open` when $BROWSER is unset by @yteraoka in https://github.com/yteraoka/ccr/pull/33
