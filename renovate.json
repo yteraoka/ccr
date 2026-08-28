@@ -5,6 +5,13 @@
   ],
   "packageRules": [
     {
+      "description": "Automerge minor and patch updates once every required check passes. Major updates stay manual.",
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
       "description": "goldmark-highlighting/v2 only builds against goldmark v1, so stay on v1 until the highlighting extension supports goldmark/v2",
       "matchManagers": ["gomod"],
       "matchPackageNames": ["github.com/yuin/goldmark"],
