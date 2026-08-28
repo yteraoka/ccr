@@ -3,7 +3,6 @@
   "extends": [
     "config:recommended"
   ],
-  "platformAutomerge": false,
   "packageRules": [
     {
       "description": "Automerge minor and patch updates once every required check passes. Major updates stay manual.",
