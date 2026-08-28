@@ -2,5 +2,13 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "goldmark-highlighting/v2 only builds against goldmark v1, so stay on v1 until the highlighting extension supports goldmark/v2",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["github.com/yuin/goldmark"],
+      "allowedVersions": "<2.0.0"
+    }
   ]
 }
