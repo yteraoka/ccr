@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.5](https://github.com/yteraoka/ccr/compare/v0.0.4...v0.0.5) - 2026-08-29
+
+- Update Songmu/tagpr action to v1.20.2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/44
+- Update module github.com/yuin/goldmark to v2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/45
+- Update dependency golangci-lint to v2.13.2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/46
+- Fix broken goldmark/v2 requirement in go.mod by @yteraoka in https://github.com/yteraoka/ccr/pull/50
+- Automerge Renovate minor and patch updates when CI is green by @yteraoka in https://github.com/yteraoka/ccr/pull/51
+- Read HOMEBREW_APP_ID from variables instead of secrets by @yteraoka in https://github.com/yteraoka/ccr/pull/52
+
 ## [v0.0.4](https://github.com/yteraoka/ccr/compare/v0.0.3...v0.0.4) - 2026-08-22
 
 - Update module github.com/yuin/goldmark to v1.8.5 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/35
