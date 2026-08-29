@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.0.6](https://github.com/yteraoka/ccr/compare/v0.0.5...v0.0.6) - 2026-08-29
+
+- Rename tagpr app credentials to TAGPR_ prefixed names by @yteraoka in https://github.com/yteraoka/ccr/pull/53
+
 ## [v0.0.5](https://github.com/yteraoka/ccr/compare/v0.0.4...v0.0.5) - 2026-08-29
 
 - Update Songmu/tagpr action to v1.20.2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/44
