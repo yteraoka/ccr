@@ -59,6 +59,18 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 並べ、それぞれ件数を添えて checkbox で切り替えられるようにします(そのセッションに
 存在しない種別は行自体を出しません)。`All` / `None` ボタンで一括切り替えができます。
 ツールを非表示にした結果 body が空になった message card も併せて隠します。
+セッションが sub agent を起動していた場合
+(`${CLAUDE_CONFIG_DIR}/projects/<encoded_cwd>/<session_id>/subagents/agent-<agent_id>.jsonl`
+が存在する場合)、その transcript へのリンクを表示します。同じディレクトリの
+`agent-<agent_id>.meta.json` から `agentType` / `name` / `description` / `toolUseId` を
+読み、リンクのラベルにします。`toolUseId` が一致する tool_use の直後と、本文の
+`<task-id>` が一致する Notification card の先頭にそれぞれインラインのリンクを出し、
+さらに filter pane の `Sub agents` グループに全件を並べます(どの message にも
+結びつけられない sub agent が取り残されないようにするため)。リンク先は
+`/<session_id>/subagents/<agent_id>` で、sub agent の jsonl は session と同じ形式の
+ため同じ描画経路で表示し、ヘッダーに元 session へ戻るリンクを置きます。agent_id は
+ディレクトリの一覧と突き合わせて解決するので、URL 経由でセッションのディレクトリ外を
+参照することはできません。
 assistant のメッセージのうち `message.usage` を持つものは、card のヘッダーに
 timestamp と並べてそのターンのトークン使用量(合計と種別ごとの内訳、picker と同じ
 表記)を表示します。同一 `message.id` が content block ごとに複数行に分かれている

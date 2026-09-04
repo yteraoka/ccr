@@ -76,11 +76,12 @@ func startTranscriptServer() (string, error) {
 	return "", fmt.Errorf("no available port in %d-%d: %w", serverPortRangeStart, serverPortRangeEnd, lastErr)
 }
 
-// handleTranscriptRequest renders the session named by the request path
-// (e.g. "/<session-id>") on demand.
+// handleTranscriptRequest renders, on demand, either the session named by
+// the request path ("/<session-id>") or one of the sub agents that session
+// spawned ("/<session-id>/subagents/<agent-id>").
 func handleTranscriptRequest(w http.ResponseWriter, r *http.Request) {
-	sessionID := strings.TrimPrefix(r.URL.Path, "/")
-	if sessionID == "" {
+	sessionID, agentID, err := parseTranscriptPath(r.URL.Path)
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -90,7 +91,18 @@ func handleTranscriptRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	htmlContent, err := buildSessionHTML(sessionID, path)
+
+	var htmlContent string
+	if agentID == "" {
+		htmlContent, err = buildSessionHTML(sessionID, path)
+	} else {
+		agent, ok := findSubagent(path, agentID)
+		if !ok {
+			http.Error(w, "sub agent not found: "+agentID, http.StatusNotFound)
+			return
+		}
+		htmlContent, err = buildSubagentHTML(sessionID, agent)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -98,6 +110,23 @@ func handleTranscriptRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(htmlContent))
+}
+
+// parseTranscriptPath splits a request path into the session id and, for a
+// sub agent page, that agent's id (empty for the session itself). Both ids
+// end up being matched against what's on disk rather than pasted into a
+// path, but they are still rejected here if they contain a separator, so a
+// malformed request fails as a 404 rather than reaching the filesystem.
+func parseTranscriptPath(urlPath string) (sessionID, agentID string, err error) {
+	parts := strings.Split(strings.Trim(urlPath, "/"), "/")
+	switch {
+	case len(parts) == 1 && parts[0] != "":
+		return parts[0], "", nil
+	case len(parts) == 3 && parts[0] != "" && parts[1] == subagentDirName && parts[2] != "":
+		return parts[0], parts[2], nil
+	default:
+		return "", "", fmt.Errorf("unrecognized transcript path: %q", urlPath)
+	}
 }
 
 // startCommand launches argv[0] with the remaining elements as arguments,

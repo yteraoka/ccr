@@ -437,21 +437,76 @@ func lookupMessageKind(key string) messageKind {
 	return messageKind{key: key, label: key, cssClass: "message"}
 }
 
-func renderEntry(e transcriptEntry) string {
+// subagentLinker resolves the sub agents a transcript spawned to the URLs
+// that render them, so the page can link a tool call (or the report it
+// produced) straight to that agent's own transcript. The zero value links
+// nothing, which is what a transcript without sub agents needs.
+type subagentLinker struct {
+	byToolUse map[string]subagentInfo
+	byID      map[string]subagentInfo
+	urlFor    func(subagentInfo) string
+}
+
+func newSubagentLinker(agents []subagentInfo, urlFor func(subagentInfo) string) subagentLinker {
+	l := subagentLinker{
+		byToolUse: make(map[string]subagentInfo, len(agents)),
+		byID:      make(map[string]subagentInfo, len(agents)),
+		urlFor:    urlFor,
+	}
+	for _, a := range agents {
+		if a.toolUseID != "" {
+			l.byToolUse[a.toolUseID] = a
+		}
+		l.byID[a.id] = a
+	}
+	return l
+}
+
+// taskIDPattern pulls the agent id out of a task notification, which names
+// the agent it is reporting for in a <task-id> tag.
+var taskIDPattern = regexp.MustCompile(`<task-id>\s*([A-Za-z0-9._-]+)\s*</task-id>`)
+
+// linkForToolUse returns the sub agent a tool call spawned, if any.
+func (l subagentLinker) linkForToolUse(toolUseID string) (subagentInfo, bool) {
+	a, ok := l.byToolUse[toolUseID]
+	return a, ok
+}
+
+// linkForText returns the sub agent a notification is reporting for, found
+// by the <task-id> it carries.
+func (l subagentLinker) linkForText(text string) (subagentInfo, bool) {
+	m := taskIDPattern.FindStringSubmatch(text)
+	if m == nil {
+		return subagentInfo{}, false
+	}
+	a, ok := l.byID[m[1]]
+	return a, ok
+}
+
+// renderSubagentLink renders the "open this sub agent's transcript" link.
+func (l subagentLinker) renderSubagentLink(a subagentInfo) string {
+	return fmt.Sprintf(`<a class="subagent-link" href="%s">🧵 %s</a>`,
+		html.EscapeString(l.urlFor(a)), html.EscapeString(a.label()))
+}
+
+func renderEntry(e transcriptEntry, links subagentLinker) string {
 	switch e.role {
 	case "user":
-		return renderUserEntry(e)
+		return renderUserEntry(e, links)
 	case "assistant":
-		return renderAssistantEntry(e)
+		return renderAssistantEntry(e, links)
 	default:
 		return ""
 	}
 }
 
-func renderUserEntry(e transcriptEntry) string {
+func renderUserEntry(e transcriptEntry, links subagentLinker) string {
 	var body strings.Builder
 	for _, b := range e.blocks {
 		if b.kind == "text" {
+			if a, ok := links.linkForText(b.text); ok {
+				body.WriteString(links.renderSubagentLink(a))
+			}
 			body.WriteString(renderMarkdown(b.text))
 		}
 	}
@@ -462,7 +517,7 @@ func renderUserEntry(e transcriptEntry) string {
 	})
 }
 
-func renderAssistantEntry(e transcriptEntry) string {
+func renderAssistantEntry(e transcriptEntry, links subagentLinker) string {
 	var body strings.Builder
 	for _, b := range e.blocks {
 		switch b.kind {
@@ -474,6 +529,9 @@ func renderAssistantEntry(e transcriptEntry) string {
 			body.WriteString(`</div></details>`)
 		case "tool_use":
 			body.WriteString(renderToolUse(b))
+			if a, ok := links.linkForToolUse(b.toolUseID); ok {
+				body.WriteString(links.renderSubagentLink(a))
+			}
 		}
 	}
 
@@ -569,17 +627,33 @@ func attrSelector(attr, value string) string {
 	return fmt.Sprintf(`[%s="%s"]`, attr, escaped)
 }
 
-// renderFilterPane renders the sidebar of checkboxes that show and hide
-// message kinds and individual tools.
-func renderFilterPane(kinds, tools []filterRow) string {
+// renderFilterPane renders the sidebar: the checkboxes that show and hide
+// message kinds and individual tools, followed by links to the transcripts
+// of any sub agents this session spawned.
+func renderFilterPane(kinds, tools []filterRow, agents []subagentInfo, links subagentLinker) string {
 	var b strings.Builder
 	b.WriteString(`<aside class="filters">` + "\n")
 	b.WriteString(`<div class="filters-inner">` + "\n")
 	b.WriteString(`<div class="filters-head"><strong>Filter</strong><span class="filter-actions"><button type="button" data-all="1">All</button><button type="button" data-all="0">None</button></span></div>` + "\n")
 	writeFilterGroup(&b, "Messages", kinds)
 	writeFilterGroup(&b, "Tools", tools)
+	writeSubagentGroup(&b, agents, links)
 	b.WriteString("</div>\n</aside>\n")
 	return b.String()
+}
+
+// writeSubagentGroup lists every sub agent transcript, so one spawned in a
+// way the page cannot tie to a specific message is still reachable.
+func writeSubagentGroup(b *strings.Builder, agents []subagentInfo, links subagentLinker) {
+	if len(agents) == 0 {
+		return
+	}
+	b.WriteString(`<div class="filter-group"><div class="filter-group-title">Sub agents</div>` + "\n")
+	for _, a := range agents {
+		fmt.Fprintf(b, `<a class="subagent-row" href="%s"><span class="filter-label">🧵 %s</span></a>`+"\n",
+			html.EscapeString(links.urlFor(a)), html.EscapeString(a.label()))
+	}
+	b.WriteString("</div>\n")
 }
 
 func writeFilterGroup(b *strings.Builder, title string, rows []filterRow) {
@@ -602,10 +676,26 @@ type sessionHeaderInfo struct {
 	aiTitle   string
 	startTime time.Time
 	endTime   time.Time
+	// subtitle names what this page is when it isn't the session itself
+	// (a sub agent's own transcript), and backLink points home from it.
+	subtitle string
+	backLink string
+	// agents are the sub agent transcripts this session spawned, and links
+	// resolves them to URLs.
+	agents []subagentInfo
+	links  subagentLinker
+}
+
+// sessionURL and subagentURL are the paths the transcript server serves: a
+// session at /<session_id>, and each of its sub agents one level below it.
+func sessionURL(sessionID string) string { return "/" + sessionID }
+
+func subagentURL(sessionID, agentID string) string {
+	return "/" + sessionID + "/" + subagentDirName + "/" + agentID
 }
 
 // buildSessionHTML parses the session's jsonl at path and renders it into
-// a self-contained HTML page.
+// a self-contained HTML page, linking any sub agents it spawned.
 func buildSessionHTML(id, path string) (string, error) {
 	entries, err := parseTranscript(path)
 	if err != nil {
@@ -615,12 +705,47 @@ func buildSessionHTML(id, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	agents := findSubagents(path)
 	meta := sessionHeaderInfo{
 		sessionID: id,
 		cwd:       cwd,
 		aiTitle:   aiTitle,
 		startTime: startTime,
 		endTime:   endTime,
+		agents:    agents,
+		links: newSubagentLinker(agents, func(a subagentInfo) string {
+			return subagentURL(id, a.id)
+		}),
+	}
+	return renderTranscriptHTML(meta, entries), nil
+}
+
+// buildSubagentHTML renders one sub agent's transcript. Sub agent files
+// hold the same lines as a session, so they go through the same pipeline,
+// with a header naming the agent and linking back to its session.
+func buildSubagentHTML(sessionID string, agent subagentInfo) (string, error) {
+	entries, err := parseTranscript(agent.path)
+	if err != nil {
+		return "", err
+	}
+	cwd, _, _, startTime, endTime, _, err := parseSessionInfo(agent.path)
+	if err != nil {
+		return "", err
+	}
+
+	subtitle := agent.agentType
+	if agent.name != "" {
+		subtitle = agent.name
+	}
+	meta := sessionHeaderInfo{
+		sessionID: sessionID,
+		cwd:       cwd,
+		aiTitle:   agent.label(),
+		startTime: startTime,
+		endTime:   endTime,
+		subtitle:  subtitle,
+		backLink:  sessionURL(sessionID),
 	}
 	return renderTranscriptHTML(meta, entries), nil
 }
@@ -635,11 +760,17 @@ func renderTranscriptHTML(meta sessionHeaderInfo, entries []transcriptEntry) str
 
 	var body strings.Builder
 	for _, e := range entries {
-		body.WriteString(renderEntry(e))
+		body.WriteString(renderEntry(e, meta.links))
 	}
 
 	var header strings.Builder
+	if meta.backLink != "" {
+		header.WriteString(`<a class="back-link" href="` + html.EscapeString(meta.backLink) + `">← back to the session</a>` + "\n")
+	}
 	header.WriteString("<h1>" + html.EscapeString(title) + "</h1>\n")
+	if meta.subtitle != "" {
+		header.WriteString(`<div class="subtitle">` + html.EscapeString(meta.subtitle) + "</div>\n")
+	}
 	header.WriteString(`<div class="meta">` + "\n")
 	if meta.cwd != "" {
 		header.WriteString("<div><strong>Directory:</strong> " + html.EscapeString(meta.cwd) + "</div>\n")
@@ -666,7 +797,7 @@ func renderTranscriptHTML(meta sessionHeaderInfo, entries []transcriptEntry) str
 	page.WriteString(`<div class="messages">` + "\n")
 	page.WriteString(body.String())
 	page.WriteString("\n</div>\n</div>\n")
-	page.WriteString(renderFilterPane(kinds, tools))
+	page.WriteString(renderFilterPane(kinds, tools, meta.agents, meta.links))
 	page.WriteString("</div>\n")
 	// style#filter-style is rewritten by the script as boxes are toggled
 	page.WriteString("<style id=\"filter-style\"></style>\n<script>\n")
@@ -797,6 +928,37 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
   gap: 1rem;
 }
 .meta strong { color: #374151; }
+.subtitle { font-size: 0.9rem; color: #6b7280; margin-bottom: 0.5rem; }
+.back-link {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: #2f6fed;
+  text-decoration: none;
+  margin-bottom: 0.5rem;
+}
+.back-link:hover { text-decoration: underline; }
+/* link from a tool call (or the report it produced) to that sub agent's
+   own transcript */
+.subagent-link {
+  display: inline-block;
+  margin: 0.35rem 0;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #c9b7ee;
+  color: #6d28d9;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.subagent-link:hover { background: #f5efff; }
+.subagent-row {
+  display: block;
+  padding: 0.15rem 0;
+  color: #6d28d9;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.subagent-row:hover { text-decoration: underline; }
 .messages { display: flex; flex-direction: column; gap: 1rem; }
 .message {
   border-radius: 10px;
