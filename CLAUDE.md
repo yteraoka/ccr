@@ -52,7 +52,17 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 します)。type = "user" の行のうち `promptSource` が `system` のもの(sub agent の
 結果報告や monitor イベントなど、harness が注入した通知)は Human ではなく
 `🔔 Notification` として表示します(`isMeta` の行は従来どおり `⚙️ System`)。コマンドの入力やツールの呼び出し内容はそのまま表示されますが、実行結果
-(output)やファイル内容、diff は既定で折り畳まれており、クリックすると開きます。この
+(output)やファイル内容、diff は既定で折り畳まれており、クリックすると開きます。
+ページ右側には表示/非表示を切り替える filter pane を置きます。`Messages` グループに
+メッセージ種別(Human / Claude / Notification / System と、assistant の thinking
+ブロック)、`Tools` グループに Read / Edit / Bash など実際に呼ばれたツールを名前順に
+並べ、それぞれ件数を添えて checkbox で切り替えられるようにします(そのセッションに
+存在しない種別は行自体を出しません)。`All` / `None` ボタンで一括切り替えができます。
+ツールを非表示にした結果 body が空になった message card も併せて隠します。
+assistant のメッセージのうち `message.usage` を持つものは、card のヘッダーに
+timestamp と並べてそのターンのトークン使用量(合計と種別ごとの内訳、picker と同じ
+表記)を表示します。同一 `message.id` が content block ごとに複数行に分かれている
+場合、使用量は実際に描画される最初の行にのみ付けます。この
 HTML は `localhost` の 8000 番から順に listen 可能な port を探して起動する単一の
 HTTP サーバーが、リクエストパスの session id (`/<session_id>`)ごとにその場で
 レンダリングして返します(`v` を押すたびに新しいサーバーを起動するのではなく、

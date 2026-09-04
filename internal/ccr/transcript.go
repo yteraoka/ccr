@@ -21,6 +21,12 @@ type transcriptEntry struct {
 	isNotification bool
 	timestamp      time.Time
 	blocks         []transcriptBlock
+	// usage is the token usage reported for an assistant turn. A message
+	// split across several jsonl lines repeats the same usage on each, so
+	// it is attached only to the first line of a given message id and left
+	// zero on the rest; hasUsage says which.
+	usage    tokenUsage
+	hasUsage bool
 }
 
 // transcriptBlock is one piece of an entry: prose text, a thinking block,
@@ -68,6 +74,8 @@ const promptSourceSystem = "system"
 
 type rawMessage struct {
 	Content json.RawMessage `json:"content"`
+	ID      string          `json:"id"`
+	Usage   *recordUsage    `json:"usage"`
 }
 
 type rawContentBlock struct {
@@ -130,6 +138,7 @@ func parseTranscript(path string) ([]transcriptEntry, error) {
 	}
 
 	var entries []transcriptEntry
+	seenUsage := make(map[string]bool)
 	for _, raw := range lines {
 		var ts time.Time
 		if raw.Timestamp != "" {
@@ -138,7 +147,7 @@ func parseTranscript(path string) ([]transcriptEntry, error) {
 
 		switch raw.Type {
 		case "assistant":
-			entry, ok := parseAssistantLine(raw, ts, outcomes)
+			entry, ok := parseAssistantLine(raw, ts, outcomes, seenUsage)
 			if ok {
 				entries = append(entries, entry)
 			}
@@ -153,7 +162,10 @@ func parseTranscript(path string) ([]transcriptEntry, error) {
 	return entries, nil
 }
 
-func parseAssistantLine(raw rawLine, ts time.Time, outcomes map[string]toolOutcome) (transcriptEntry, bool) {
+// parseAssistantLine turns one assistant jsonl line into an entry. seenUsage
+// tracks which message ids have already had their usage attributed, so a
+// message spread over several lines reports its tokens once.
+func parseAssistantLine(raw rawLine, ts time.Time, outcomes map[string]toolOutcome, seenUsage map[string]bool) (transcriptEntry, bool) {
 	var msg rawMessage
 	if err := json.Unmarshal(raw.Message, &msg); err != nil {
 		return transcriptEntry{}, false
@@ -184,7 +196,26 @@ func parseAssistantLine(raw rawLine, ts time.Time, outcomes map[string]toolOutco
 			entry.blocks = append(entry.blocks, tb)
 		}
 	}
-	return entry, len(entry.blocks) > 0
+	if len(entry.blocks) == 0 {
+		return transcriptEntry{}, false
+	}
+
+	// Claim the usage only now: a line that renders nothing is dropped, and
+	// claiming it earlier would lose the tokens of every message whose
+	// first line holds nothing renderable (an empty thinking block, say).
+	if msg.Usage != nil && !seenUsage[msg.ID] {
+		if msg.ID != "" {
+			seenUsage[msg.ID] = true
+		}
+		entry.usage = tokenUsage{
+			input:         msg.Usage.InputTokens,
+			output:        msg.Usage.OutputTokens,
+			cacheCreation: msg.Usage.CacheCreationInputTokens,
+			cacheRead:     msg.Usage.CacheReadInputTokens,
+		}
+		entry.hasUsage = entry.usage.total() > 0
+	}
+	return entry, true
 }
 
 func parseUserLine(raw rawLine, ts time.Time) (transcriptEntry, bool) {
