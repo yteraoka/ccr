@@ -242,3 +242,108 @@ func equalSlices(a, b []string) bool {
 	}
 	return true
 }
+
+func TestParseTranscriptPath(t *testing.T) {
+	cases := []struct {
+		path       string
+		wantID     string
+		wantAgent  string
+		wantReject bool
+	}{
+		{path: "/session-1", wantID: "session-1"},
+		{path: "/session-1/", wantID: "session-1"},
+		{path: "/session-1/subagents/a111", wantID: "session-1", wantAgent: "a111"},
+		// anything else is not a page this server serves
+		{path: "/", wantReject: true},
+		{path: "", wantReject: true},
+		{path: "/session-1/subagents", wantReject: true},
+		{path: "/session-1/other/a111", wantReject: true},
+		{path: "/session-1/subagents/a111/extra", wantReject: true},
+		{path: "/../../etc/passwd", wantReject: true},
+		{path: "/session-1/subagents/../../../etc/passwd", wantReject: true},
+	}
+	for _, c := range cases {
+		id, agent, err := parseTranscriptPath(c.path)
+		if c.wantReject {
+			if err == nil {
+				t.Errorf("parseTranscriptPath(%q) = (%q, %q), want an error", c.path, id, agent)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseTranscriptPath(%q): %v", c.path, err)
+			continue
+		}
+		if id != c.wantID || agent != c.wantAgent {
+			t.Errorf("parseTranscriptPath(%q) = (%q, %q), want (%q, %q)", c.path, id, agent, c.wantID, c.wantAgent)
+		}
+	}
+}
+
+func TestServeTranscriptSessionServesSubagentPage(t *testing.T) {
+	const sessionID = "55555555-5555-5555-5555-555555555555"
+	setupFixtureSession(t, sessionID, "parent session")
+
+	// lay a sub agent transcript down beside the session fixture
+	sessionPath, err := findSessionFile(projectsDir(), sessionID)
+	if err != nil {
+		t.Fatalf("findSessionFile: %v", err)
+	}
+	subDir := subagentsDir(sessionPath)
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"type":"assistant","message":{"content":[{"type":"text","text":"agent said this"}]}}` + "\n"
+	if err := os.WriteFile(filepath.Join(subDir, "agent-a111.jsonl"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta := `{"agentType":"Explore","description":"Look around"}`
+	if err := os.WriteFile(filepath.Join(subDir, "agent-a111.meta.json"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionURLStr, err := serveTranscriptSession(sessionID)
+	if err != nil {
+		t.Fatalf("serveTranscriptSession: %v", err)
+	}
+	base := sessionURLStr[:strings.LastIndex(sessionURLStr, "/")]
+
+	// the session page links to the agent
+	sessionBody := httpGetBody(t, sessionURLStr)
+	if !strings.Contains(sessionBody, subagentURL(sessionID, "a111")) {
+		t.Errorf("session page does not link to the sub agent: %q", sessionBody)
+	}
+
+	// and that link renders the agent's own transcript
+	agentBody := httpGetBody(t, base+subagentURL(sessionID, "a111"))
+	if !strings.Contains(agentBody, "agent said this") {
+		t.Errorf("sub agent page = %q, want the agent's messages", agentBody)
+	}
+	if !strings.Contains(agentBody, `href="/`+sessionID+`"`) {
+		t.Errorf("sub agent page = %q, want a link back to the session", agentBody)
+	}
+
+	// an agent id that isn't there is a 404, not a path escape
+	resp, err := http.Get(base + subagentURL(sessionID, "nope"))
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status for unknown agent = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func httpGetBody(t *testing.T, url string) string {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return string(body)
+}

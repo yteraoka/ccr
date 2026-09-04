@@ -337,19 +337,19 @@ func TestRenderToolUseGenericToolNoName(t *testing.T) {
 }
 
 func TestRenderEntryUnknownRole(t *testing.T) {
-	if got := renderEntry(transcriptEntry{role: "system"}); got != "" {
+	if got := renderEntry(transcriptEntry{role: "system"}, subagentLinker{}); got != "" {
 		t.Errorf("renderEntry(unknown role) = %q, want empty string", got)
 	}
 }
 
 func TestRenderEntryDispatchesByRole(t *testing.T) {
 	userEntry := transcriptEntry{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi"}}}
-	if got := renderEntry(userEntry); !strings.Contains(got, "🧑 Human") {
+	if got := renderEntry(userEntry, subagentLinker{}); !strings.Contains(got, "🧑 Human") {
 		t.Errorf("renderEntry(user) = %q, want it to dispatch to renderUserEntry", got)
 	}
 
 	assistantEntry := transcriptEntry{role: "assistant", blocks: []transcriptBlock{{kind: "text", text: "hi"}}}
-	if got := renderEntry(assistantEntry); !strings.Contains(got, "🤖 Claude") {
+	if got := renderEntry(assistantEntry, subagentLinker{}); !strings.Contains(got, "🤖 Claude") {
 		t.Errorf("renderEntry(assistant) = %q, want it to dispatch to renderAssistantEntry", got)
 	}
 }
@@ -379,7 +379,7 @@ func TestBuildSessionHTMLValid(t *testing.T) {
 
 func TestRenderUserEntryHuman(t *testing.T) {
 	e := transcriptEntry{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi there"}}}
-	got := renderUserEntry(e)
+	got := renderUserEntry(e, subagentLinker{})
 	if !strings.Contains(got, "🧑 Human") {
 		t.Errorf("renderUserEntry = %q, want Human label", got)
 	}
@@ -390,7 +390,7 @@ func TestRenderUserEntryHuman(t *testing.T) {
 
 func TestRenderUserEntryMeta(t *testing.T) {
 	e := transcriptEntry{role: "user", isMeta: true, blocks: []transcriptBlock{{kind: "text", text: "note"}}}
-	got := renderUserEntry(e)
+	got := renderUserEntry(e, subagentLinker{})
 	if !strings.Contains(got, "⚙️ System") {
 		t.Errorf("renderUserEntry(isMeta) = %q, want System label", got)
 	}
@@ -402,7 +402,7 @@ func TestRenderUserEntryNotification(t *testing.T) {
 		isNotification: true,
 		blocks:         []transcriptBlock{{kind: "text", text: "agent finished"}},
 	}
-	got := renderUserEntry(e)
+	got := renderUserEntry(e, subagentLinker{})
 
 	if !strings.Contains(got, "🔔 Notification") {
 		t.Errorf("renderUserEntry(isNotification) = %q, want Notification label", got)
@@ -424,7 +424,7 @@ func TestRenderAssistantEntryTextThinkingAndTool(t *testing.T) {
 			{kind: "tool_use", toolName: "Glob", input: []byte(`{}`)},
 		},
 	}
-	got := renderAssistantEntry(e)
+	got := renderAssistantEntry(e, subagentLinker{})
 	if !strings.Contains(got, "🤖 Claude") {
 		t.Errorf("renderAssistantEntry = %q, want Claude label", got)
 	}
@@ -561,7 +561,7 @@ func TestRenderAssistantEntryShowsTokenUsage(t *testing.T) {
 		usage:    tokenUsage{input: 2, output: 144, cacheCreation: 29552},
 		hasUsage: true,
 	}
-	got := renderAssistantEntry(e)
+	got := renderAssistantEntry(e, subagentLinker{})
 
 	if !strings.Contains(got, "msg-tokens") {
 		t.Errorf("renderAssistantEntry = %q, want a token badge", got)
@@ -573,7 +573,7 @@ func TestRenderAssistantEntryShowsTokenUsage(t *testing.T) {
 
 func TestRenderAssistantEntryWithoutUsageHasNoTokenBadge(t *testing.T) {
 	e := transcriptEntry{role: "assistant", blocks: []transcriptBlock{{kind: "text", text: "hello"}}}
-	if got := renderAssistantEntry(e); strings.Contains(got, "msg-tokens") {
+	if got := renderAssistantEntry(e, subagentLinker{}); strings.Contains(got, "msg-tokens") {
 		t.Errorf("renderAssistantEntry(no usage) = %q, want no token badge", got)
 	}
 }
@@ -621,5 +621,77 @@ func TestPageCSSLayoutDoesNotShrinkWrapFilterPane(t *testing.T) {
 	}
 	if !strings.Contains(inner[1], "position: sticky") {
 		t.Errorf(".filters-inner = %q, want position: sticky so the pane follows the scroll", inner[1])
+	}
+}
+
+func TestRenderTranscriptHTMLLinksSubagents(t *testing.T) {
+	agents := []subagentInfo{
+		{id: "a111", description: "/code-review", agentType: "general-purpose"},
+		{id: "b222", description: "Explore the parser", toolUseID: "toolu_1"},
+	}
+	links := newSubagentLinker(agents, func(a subagentInfo) string { return subagentURL("s1", a.id) })
+	entries := []transcriptEntry{
+		// the tool call that spawned b222
+		{role: "assistant", blocks: []transcriptBlock{
+			{kind: "tool_use", toolName: "Task", toolUseID: "toolu_1"},
+		}},
+		// the report a111 sent back, which names itself by task-id
+		{role: "user", isNotification: true, blocks: []transcriptBlock{
+			{kind: "text", text: "<task-notification><task-id>a111</task-id><result>done</result></task-notification>"},
+		}},
+	}
+
+	got := renderTranscriptHTML(sessionHeaderInfo{sessionID: "s1", agents: agents, links: links}, entries)
+
+	for _, want := range []string{
+		`href="/s1/subagents/b222"`, // inline, on the spawning tool call
+		`href="/s1/subagents/a111"`, // inline, on the report it produced
+		"Sub agents",                // and listed in the pane
+		"Explore the parser",
+		"/code-review",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderTranscriptHTML missing %q", want)
+		}
+	}
+}
+
+func TestRenderTranscriptHTMLWithoutSubagentsHasNoLinks(t *testing.T) {
+	entries := []transcriptEntry{
+		{role: "assistant", blocks: []transcriptBlock{{kind: "tool_use", toolName: "Task", toolUseID: "toolu_1"}}},
+	}
+	got := renderTranscriptHTML(sessionHeaderInfo{sessionID: "s1"}, entries)
+
+	// look for the markup, not the stylesheet, which always defines the rules
+	if strings.Contains(got, `class="subagent-link"`) {
+		t.Error("renderTranscriptHTML emitted a sub agent link when there are none")
+	}
+	if strings.Contains(got, ">Sub agents<") {
+		t.Error("renderTranscriptHTML emitted the Sub agents group when there are none")
+	}
+}
+
+func TestBuildSubagentHTMLHasBackLink(t *testing.T) {
+	sessionPath := writeSubagentFixture(t, map[string]string{
+		"a111": `{"agentType":"general-purpose","name":"code-review","description":"/code-review"}`,
+	})
+	agent, ok := findSubagent(sessionPath, "a111")
+	if !ok {
+		t.Fatal("fixture agent not found")
+	}
+
+	got, err := buildSubagentHTML("session-1", agent)
+	if err != nil {
+		t.Fatalf("buildSubagentHTML: %v", err)
+	}
+	if !strings.Contains(got, `href="/session-1"`) {
+		t.Errorf("buildSubagentHTML = %q, want a link back to the session", got)
+	}
+	if !strings.Contains(got, "/code-review") {
+		t.Errorf("buildSubagentHTML = %q, want the agent named in the header", got)
+	}
+	// the sub agent's own turns render through the same pipeline
+	if !strings.Contains(got, "done") {
+		t.Errorf("buildSubagentHTML = %q, want the agent's messages rendered", got)
 	}
 }

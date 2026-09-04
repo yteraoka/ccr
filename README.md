@@ -110,7 +110,12 @@ that was actually called (Read, Edit, Bash, …), with a count next to each
 and `All`/`None` buttons. Only kinds present in that session get a row,
 and a message left with nothing visible is hidden along with its contents.
 Assistant turns that report token usage show it in the card header next to
-the timestamp, broken down the same way as in the picker. Command output, diffs, and file content
+the timestamp, broken down the same way as in the picker.
+
+If the session spawned sub agents, each one's own transcript is a click
+away: next to the tool call that started it, on the report it sent back,
+and listed under `Sub agents` in the pane. Those pages render exactly like
+a session and link back to the one they belong to. Command output, diffs, and file content
 are collapsed by default (click to expand) so the page stays scannable.
 
 The page isn't written to a file: `ccr` starts a small local HTTP server
