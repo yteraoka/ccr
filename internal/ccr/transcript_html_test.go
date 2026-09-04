@@ -3,6 +3,7 @@ package ccr
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -162,7 +163,7 @@ func TestHighlightCodeNonEmpty(t *testing.T) {
 }
 
 func TestToolCard(t *testing.T) {
-	got := toolCard("🖥️", "Bash", "<pre>body</pre>", false)
+	got := toolCard("Bash", "Bash", "<pre>body</pre>", false)
 	if !strings.Contains(got, "tool-card") || strings.Contains(got, "tool-card-error") {
 		t.Errorf("toolCard(isError=false) = %q, want tool-card without error class", got)
 	}
@@ -172,7 +173,7 @@ func TestToolCard(t *testing.T) {
 }
 
 func TestToolCardError(t *testing.T) {
-	got := toolCard("🖥️", "Bash", "body", true)
+	got := toolCard("Bash", "Bash", "body", true)
 	if !strings.Contains(got, "tool-card-error") {
 		t.Errorf("toolCard(isError=true) = %q, want tool-card-error class", got)
 	}
@@ -440,14 +441,14 @@ func TestRenderAssistantEntryTextThinkingAndTool(t *testing.T) {
 
 func TestRenderMessageCardWithTimestamp(t *testing.T) {
 	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	got := renderMessageCard("message message-human", "🧑 Human", ts, "<p>hi</p>")
+	got := renderMessageCard(messageCard{kind: lookupMessageKind("human"), ts: ts, body: "<p>hi</p>"})
 	if !strings.Contains(got, "msg-time") {
 		t.Errorf("renderMessageCard(non-zero ts) = %q, want a msg-time span", got)
 	}
 }
 
 func TestRenderMessageCardWithoutTimestamp(t *testing.T) {
-	got := renderMessageCard("message message-human", "🧑 Human", time.Time{}, "<p>hi</p>")
+	got := renderMessageCard(messageCard{kind: lookupMessageKind("human"), body: "<p>hi</p>"})
 	if strings.Contains(got, "msg-time") {
 		t.Errorf("renderMessageCard(zero ts) = %q, want no msg-time span", got)
 	}
@@ -477,5 +478,148 @@ func TestRenderTranscriptHTMLTitleFallsBackToSessionID(t *testing.T) {
 	got := renderTranscriptHTML(meta, nil)
 	if !strings.Contains(got, "<title>session-1</title>") {
 		t.Errorf("renderTranscriptHTML = %q, want session id as title", got)
+	}
+}
+
+func TestCollectFilterRowsCountsOnlyWhatIsPresent(t *testing.T) {
+	entries := []transcriptEntry{
+		{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi"}}},
+		{role: "assistant", blocks: []transcriptBlock{
+			{kind: "thinking", text: "hmm"},
+			{kind: "tool_use", toolName: "Bash"},
+			{kind: "tool_use", toolName: "Read"},
+		}},
+		{role: "assistant", blocks: []transcriptBlock{{kind: "tool_use", toolName: "Bash"}}},
+	}
+
+	kinds, tools := collectFilterRows(entries)
+
+	kindCounts := map[string]int{}
+	for _, r := range kinds {
+		kindCounts[r.label] = r.count
+	}
+	if kindCounts["🧑 Human"] != 1 || kindCounts["🤖 Claude"] != 2 || kindCounts["💭 Thinking"] != 1 {
+		t.Errorf("kind rows = %+v, want 1 human, 2 assistant, 1 thinking", kinds)
+	}
+	// nothing in this transcript is a notification or a system note, so no
+	// switch should be offered for them
+	if _, ok := kindCounts["🔔 Notification"]; ok {
+		t.Errorf("kind rows = %+v, want no Notification row when there are none", kinds)
+	}
+	if _, ok := kindCounts["⚙️ System"]; ok {
+		t.Errorf("kind rows = %+v, want no System row when there are none", kinds)
+	}
+
+	if len(tools) != 2 {
+		t.Fatalf("tool rows = %+v, want Bash and Read", tools)
+	}
+	// sorted by name, with each tool's call count
+	if tools[0].label != "🖥️ Bash" || tools[0].count != 2 {
+		t.Errorf("tools[0] = %+v, want Bash x2", tools[0])
+	}
+	if tools[1].label != "📖 Read" || tools[1].count != 1 {
+		t.Errorf("tools[1] = %+v, want Read x1", tools[1])
+	}
+	if tools[0].selector != `[data-tool="Bash"]` {
+		t.Errorf("tools[0].selector = %q, want a data-tool selector", tools[0].selector)
+	}
+}
+
+func TestAttrSelectorEscapesValue(t *testing.T) {
+	got := attrSelector("data-tool", `we"ird\name`)
+	want := `[data-tool="we\"ird\\name"]`
+	if got != want {
+		t.Errorf("attrSelector = %q, want %q", got, want)
+	}
+}
+
+func TestRenderTranscriptHTMLIncludesFilterPane(t *testing.T) {
+	entries := []transcriptEntry{
+		{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi"}}},
+		{role: "assistant", blocks: []transcriptBlock{{kind: "tool_use", toolName: "Bash"}}},
+	}
+	got := renderTranscriptHTML(sessionHeaderInfo{sessionID: "s1"}, entries)
+
+	for _, want := range []string{
+		`class="filters"`,
+		`data-sel="[data-kind=&#34;human&#34;]"`,
+		`data-sel="[data-tool=&#34;Bash&#34;]"`,
+		`data-kind="assistant"`,
+		`data-tool="Bash"`,
+		`id="filter-style"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderTranscriptHTML missing %q", want)
+		}
+	}
+}
+
+func TestRenderAssistantEntryShowsTokenUsage(t *testing.T) {
+	e := transcriptEntry{
+		role:     "assistant",
+		blocks:   []transcriptBlock{{kind: "text", text: "hello"}},
+		usage:    tokenUsage{input: 2, output: 144, cacheCreation: 29552},
+		hasUsage: true,
+	}
+	got := renderAssistantEntry(e)
+
+	if !strings.Contains(got, "msg-tokens") {
+		t.Errorf("renderAssistantEntry = %q, want a token badge", got)
+	}
+	if !strings.Contains(got, "29.7K (in 2 / out 144 / cache write 29.6K / cache read 0)") {
+		t.Errorf("renderAssistantEntry = %q, want the usage breakdown", got)
+	}
+}
+
+func TestRenderAssistantEntryWithoutUsageHasNoTokenBadge(t *testing.T) {
+	e := transcriptEntry{role: "assistant", blocks: []transcriptBlock{{kind: "text", text: "hello"}}}
+	if got := renderAssistantEntry(e); strings.Contains(got, "msg-tokens") {
+		t.Errorf("renderAssistantEntry(no usage) = %q, want no token badge", got)
+	}
+}
+
+// The four message kinds have to be tellable apart at a glance, so each
+// carries its own card background rather than sharing the default white.
+func TestPageCSSGivesEachMessageKindItsOwnBackground(t *testing.T) {
+	backgrounds := map[string]string{}
+	for _, k := range messageKinds {
+		class := strings.TrimPrefix(k.cssClass, "message ")
+		re := regexp.MustCompile(`\.` + regexp.QuoteMeta(class) + ` \{[^}]*background: (#[0-9a-fA-F]{6})`)
+		m := re.FindStringSubmatch(pageCSS)
+		if m == nil {
+			t.Errorf("pageCSS has no background for .%s", class)
+			continue
+		}
+		if prev, ok := backgrounds[m[1]]; ok {
+			t.Errorf(".%s reuses %s, already used by .%s", class, m[1], prev)
+		}
+		backgrounds[m[1]] = class
+	}
+	if len(backgrounds) != len(messageKinds) {
+		t.Errorf("got %d distinct card backgrounds, want one per kind (%d)", len(backgrounds), len(messageKinds))
+	}
+}
+
+// The filter card is sticky, and a sticky element can only travel inside
+// its parent's box. .filters therefore has to keep the full height of the
+// flex row: constraining .layout's cross-axis alignment shrink-wraps the
+// aside and silently stops the card from following the scroll.
+func TestPageCSSLayoutDoesNotShrinkWrapFilterPane(t *testing.T) {
+	layout := regexp.MustCompile(`(?s)\n\.layout \{(.*?)\n\}`).FindStringSubmatch(pageCSS)
+	if layout == nil {
+		t.Fatal("pageCSS has no .layout rule")
+	}
+	// strip comments before looking for the declaration
+	body := regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(layout[1], "")
+	if strings.Contains(body, "align-items") {
+		t.Errorf(".layout declares align-items (%q); that shrink-wraps .filters and breaks the sticky filter card", body)
+	}
+
+	inner := regexp.MustCompile(`(?s)\n\.filters-inner \{(.*?)\n\}`).FindStringSubmatch(pageCSS)
+	if inner == nil {
+		t.Fatal("pageCSS has no .filters-inner rule")
+	}
+	if !strings.Contains(inner[1], "position: sticky") {
+		t.Errorf(".filters-inner = %q, want position: sticky so the pane follows the scroll", inner[1])
 	}
 }

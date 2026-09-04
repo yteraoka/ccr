@@ -102,7 +102,15 @@ self-contained, light-themed HTML page — Human and AI turns are visually
 distinguished, prose is rendered as Markdown, and commands/diffs/file
 content are syntax-highlighted. Notifications the harness injects on your
 behalf (a sub agent reporting its result, a monitor event) arrive as user
-lines but are labelled `🔔 Notification` rather than attributed to you. Command output, diffs, and file content
+lines but are labelled `🔔 Notification` rather than attributed to you.
+
+A filter pane on the right toggles what the page shows: message kinds
+(Human, Claude, Notification, System, and thinking blocks) and each tool
+that was actually called (Read, Edit, Bash, …), with a count next to each
+and `All`/`None` buttons. Only kinds present in that session get a row,
+and a message left with nothing visible is hidden along with its contents.
+Assistant turns that report token usage show it in the card header next to
+the timestamp, broken down the same way as in the picker. Command output, diffs, and file content
 are collapsed by default (click to expand) so the page stays scannable.
 
 The page isn't written to a file: `ccr` starts a small local HTTP server

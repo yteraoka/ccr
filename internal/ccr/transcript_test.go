@@ -136,7 +136,7 @@ func TestReadJSONLLinesSkipsBlankAndInvalidLines(t *testing.T) {
 
 func TestParseAssistantLineInvalidMessage(t *testing.T) {
 	raw := rawLine{Type: "assistant", Message: []byte(`not json`)}
-	_, ok := parseAssistantLine(raw, time.Time{}, nil)
+	_, ok := parseAssistantLine(raw, time.Time{}, nil, map[string]bool{})
 	if ok {
 		t.Error("expected parseAssistantLine to fail on invalid message JSON")
 	}
@@ -144,7 +144,7 @@ func TestParseAssistantLineInvalidMessage(t *testing.T) {
 
 func TestParseAssistantLineInvalidContent(t *testing.T) {
 	raw := rawLine{Type: "assistant", Message: []byte(`{"content":"not an array"}`)}
-	_, ok := parseAssistantLine(raw, time.Time{}, nil)
+	_, ok := parseAssistantLine(raw, time.Time{}, nil, map[string]bool{})
 	if ok {
 		t.Error("expected parseAssistantLine to fail when content isn't a block array")
 	}
@@ -187,5 +187,67 @@ func TestParseTranscriptIsErrorOutcome(t *testing.T) {
 	outcome := entries[0].blocks[0].outcome
 	if outcome == nil || !outcome.isError {
 		t.Fatalf("outcome = %+v, want isError true", outcome)
+	}
+}
+
+// One assistant message is written to the jsonl once per content block,
+// each line repeating the same usage, so only the first line of a message
+// may report its tokens.
+func TestParseTranscriptAttributesUsageOncePerMessage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+
+	usage := `"usage":{"input_tokens":2,"output_tokens":144,"cache_creation_input_tokens":29552,"cache_read_input_tokens":0}`
+	content := `{"type":"assistant","message":{"id":"msg_1",` + usage + `,"content":[{"type":"thinking","thinking":"hmm"}]}}
+{"type":"assistant","message":{"id":"msg_1",` + usage + `,"content":[{"type":"text","text":"hello"}]}}
+{"type":"assistant","message":{"id":"msg_2","usage":{"input_tokens":1,"output_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":3},"content":[{"type":"text","text":"bye"}]}}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := parseTranscript(path)
+	if err != nil {
+		t.Fatalf("parseTranscript: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("got %d entries, want 3: %+v", len(entries), entries)
+	}
+
+	if !entries[0].hasUsage || entries[0].usage.total() != 29698 {
+		t.Errorf("entry 0 = %+v, want the message's usage", entries[0])
+	}
+	if entries[1].hasUsage {
+		t.Errorf("entry 1 = %+v, want no usage on the repeat of msg_1", entries[1])
+	}
+	if !entries[2].hasUsage || entries[2].usage.total() != 6 {
+		t.Errorf("entry 2 = %+v, want msg_2's own usage", entries[2])
+	}
+}
+
+// A message whose first line renders nothing (an empty thinking block) is
+// dropped, so its usage has to survive to the next line of that message
+// rather than being claimed by the dropped one.
+func TestParseTranscriptKeepsUsageWhenFirstLineIsDropped(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+
+	usage := `"usage":{"input_tokens":2,"output_tokens":144,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}`
+	content := `{"type":"assistant","message":{"id":"msg_1",` + usage + `,"content":[{"type":"thinking","thinking":""}]}}
+{"type":"assistant","message":{"id":"msg_1",` + usage + `,"content":[{"type":"text","text":"hello"}]}}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := parseTranscript(path)
+	if err != nil {
+		t.Fatalf("parseTranscript: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1 (the empty thinking line is dropped): %+v", len(entries), entries)
+	}
+	if !entries[0].hasUsage || entries[0].usage.total() != 146 {
+		t.Errorf("entry = %+v, want the message's usage carried over to the rendered line", entries[0])
 	}
 }

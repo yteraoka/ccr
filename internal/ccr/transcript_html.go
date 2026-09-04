@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -230,6 +231,33 @@ type readToolUseResult struct {
 	} `json:"file"`
 }
 
+// toolIcons gives the tools with a dedicated renderer their own icon; every
+// other tool falls back to the generic one.
+var toolIcons = map[string]string{
+	"Bash":  "🖥️",
+	"Edit":  "✏️",
+	"Write": "📝",
+	"Read":  "📖",
+}
+
+const genericToolIcon = "🔧"
+
+// toolFilterName is the name a tool call is grouped under in the filter
+// pane: its tool name, or "Tool" for the rare block that carries none.
+func toolFilterName(name string) string {
+	if name == "" {
+		return "Tool"
+	}
+	return name
+}
+
+func toolIcon(name string) string {
+	if icon, ok := toolIcons[name]; ok {
+		return icon
+	}
+	return genericToolIcon
+}
+
 // renderToolUse renders one tool_use block (and its correlated result, if
 // any) as a self-contained "tool card".
 func renderToolUse(b transcriptBlock) string {
@@ -247,13 +275,15 @@ func renderToolUse(b transcriptBlock) string {
 	}
 }
 
-func toolCard(icon, title, body string, isError bool) string {
+// toolCard renders one tool call. toolName goes into data-tool so the
+// filter pane can show or hide every call of that tool.
+func toolCard(toolName, title, body string, isError bool) string {
 	class := "tool-card"
 	if isError {
 		class += " tool-card-error"
 	}
-	return fmt.Sprintf(`<div class="%s"><div class="tool-header">%s %s</div><div class="tool-body">%s</div></div>`,
-		class, icon, html.EscapeString(title), body)
+	return fmt.Sprintf(`<div class="%s" data-tool="%s"><div class="tool-header">%s %s</div><div class="tool-body">%s</div></div>`,
+		class, html.EscapeString(toolName), toolIcon(toolName), html.EscapeString(title), body)
 }
 
 // renderGenericOutcome renders a tool_result's generic text content
@@ -295,7 +325,7 @@ func renderBashTool(b transcriptBlock) string {
 	if in.Description != "" {
 		title += " — " + in.Description
 	}
-	return toolCard("🖥️", title, body.String(), b.outcome != nil && b.outcome.isError)
+	return toolCard("Bash", title, body.String(), b.outcome != nil && b.outcome.isError)
 }
 
 func renderEditTool(b transcriptBlock) string {
@@ -314,7 +344,7 @@ func renderEditTool(b transcriptBlock) string {
 	}
 
 	body := renderCollapsedCodeBlock(diffText, "diff", "Diff")
-	return toolCard("✏️", in.FilePath, body, b.outcome != nil && b.outcome.isError)
+	return toolCard("Edit", in.FilePath, body, b.outcome != nil && b.outcome.isError)
 }
 
 func renderWriteTool(b transcriptBlock) string {
@@ -330,7 +360,7 @@ func renderWriteTool(b transcriptBlock) string {
 	}
 
 	body := renderCollapsedCodeBlock(content, in.FilePath, "Content")
-	return toolCard("📝", in.FilePath, body, b.outcome != nil && b.outcome.isError)
+	return toolCard("Write", in.FilePath, body, b.outcome != nil && b.outcome.isError)
 }
 
 func renderReadTool(b transcriptBlock) string {
@@ -349,7 +379,7 @@ func renderReadTool(b transcriptBlock) string {
 	}
 
 	body := renderCollapsedCodeBlock(content, in.FilePath, "Content")
-	return toolCard("📖", in.FilePath, body, b.outcome != nil && b.outcome.isError)
+	return toolCard("Read", in.FilePath, body, b.outcome != nil && b.outcome.isError)
 }
 
 func renderGenericTool(b transcriptBlock) string {
@@ -357,11 +387,54 @@ func renderGenericTool(b transcriptBlock) string {
 	if b.outcome != nil {
 		body += renderGenericOutcome(*b.outcome)
 	}
-	name := b.toolName
-	if name == "" {
-		name = "Tool"
+	name := toolFilterName(b.toolName)
+	return toolCard(name, name, body, b.outcome != nil && b.outcome.isError)
+}
+
+// messageKind is one filterable class of message: how its card is labelled
+// and styled, and (via its key) the data-kind the filter pane switches on.
+type messageKind struct {
+	key      string
+	label    string
+	cssClass string
+}
+
+// messageKinds lists every message kind in the order the filter pane shows
+// them.
+var messageKinds = []messageKind{
+	{"human", "🧑 Human", "message message-human"},
+	{"assistant", "🤖 Claude", "message message-assistant"},
+	{"notification", "🔔 Notification", "message message-notification"},
+	{"system", "⚙️ System", "message message-system"},
+}
+
+// thinkingKind is the filter key for assistant thinking blocks. They live
+// inside assistant cards rather than being cards of their own, so they are
+// filtered separately from the message kinds.
+const thinkingKind = "thinking"
+
+// entryKind reports which messageKind an entry belongs to.
+func entryKind(e transcriptEntry) string {
+	if e.role == "assistant" {
+		return "assistant"
 	}
-	return toolCard("🔧", name, body, b.outcome != nil && b.outcome.isError)
+	switch {
+	case e.isNotification:
+		return "notification"
+	case e.isMeta:
+		return "system"
+	default:
+		return "human"
+	}
+}
+
+func lookupMessageKind(key string) messageKind {
+	for _, k := range messageKinds {
+		if k.key == key {
+			return k
+		}
+	}
+	return messageKind{key: key, label: key, cssClass: "message"}
 }
 
 func renderEntry(e transcriptEntry) string {
@@ -376,20 +449,17 @@ func renderEntry(e transcriptEntry) string {
 }
 
 func renderUserEntry(e transcriptEntry) string {
-	label, cardClass := "🧑 Human", "message message-human"
-	switch {
-	case e.isNotification:
-		label, cardClass = "🔔 Notification", "message message-notification"
-	case e.isMeta:
-		label, cardClass = "⚙️ System", "message message-system"
-	}
 	var body strings.Builder
 	for _, b := range e.blocks {
 		if b.kind == "text" {
 			body.WriteString(renderMarkdown(b.text))
 		}
 	}
-	return renderMessageCard(cardClass, label, e.timestamp, body.String())
+	return renderMessageCard(messageCard{
+		kind: lookupMessageKind(entryKind(e)),
+		ts:   e.timestamp,
+		body: body.String(),
+	})
 }
 
 func renderAssistantEntry(e transcriptEntry) string {
@@ -399,23 +469,129 @@ func renderAssistantEntry(e transcriptEntry) string {
 		case "text":
 			body.WriteString(renderMarkdown(b.text))
 		case "thinking":
-			body.WriteString(`<details class="thinking"><summary>Thinking</summary><div class="thinking-body">`)
+			body.WriteString(`<details class="thinking" data-kind="` + thinkingKind + `"><summary>Thinking</summary><div class="thinking-body">`)
 			body.WriteString(renderMarkdown(b.text))
 			body.WriteString(`</div></details>`)
 		case "tool_use":
 			body.WriteString(renderToolUse(b))
 		}
 	}
-	return renderMessageCard("message message-assistant", "🤖 Claude", e.timestamp, body.String())
+
+	card := messageCard{
+		kind: lookupMessageKind("assistant"),
+		ts:   e.timestamp,
+		body: body.String(),
+	}
+	if e.hasUsage {
+		card.tokens = formatTokenUsage(e.usage)
+	}
+	return renderMessageCard(card)
 }
 
-func renderMessageCard(cssClass, label string, ts time.Time, bodyHTML string) string {
-	timeLabel := ""
-	if !ts.IsZero() {
-		timeLabel = `<span class="msg-time">` + html.EscapeString(ts.Local().Format("2006-01-02 15:04:05")) + `</span>`
+// messageCard is one rendered message: its kind (which drives the label,
+// styling and data-kind), the token usage to show alongside the timestamp
+// if the turn reported any, and the already-rendered body HTML.
+type messageCard struct {
+	kind   messageKind
+	tokens string
+	ts     time.Time
+	body   string
+}
+
+func renderMessageCard(c messageCard) string {
+	var aside strings.Builder
+	if c.tokens != "" {
+		aside.WriteString(`<span class="msg-tokens" title="token usage for this turn">🎟️ ` + html.EscapeString(c.tokens) + `</span>`)
 	}
-	return fmt.Sprintf(`<div class="%s"><div class="msg-header"><span>%s</span>%s</div><div class="msg-body">%s</div></div>`,
-		cssClass, html.EscapeString(label), timeLabel, bodyHTML)
+	if !c.ts.IsZero() {
+		aside.WriteString(`<span class="msg-time">` + html.EscapeString(c.ts.Local().Format("2006-01-02 15:04:05")) + `</span>`)
+	}
+	return fmt.Sprintf(`<div class="%s" data-kind="%s"><div class="msg-header"><span>%s</span><span class="msg-aside">%s</span></div><div class="msg-body">%s</div></div>`,
+		c.kind.cssClass, html.EscapeString(c.kind.key), html.EscapeString(c.kind.label), aside.String(), c.body)
+}
+
+// filterRow is one checkbox in the filter pane: what it hides, how it is
+// labelled, and how many of them the transcript holds.
+type filterRow struct {
+	selector string // CSS selector for the elements it controls
+	label    string
+	count    int
+}
+
+// collectFilterRows walks the entries and returns the filter pane's two
+// groups: one row per message kind, and one per tool actually called. Kinds
+// absent from this transcript get no row, so the pane never offers a switch
+// that does nothing.
+func collectFilterRows(entries []transcriptEntry) (kinds, tools []filterRow) {
+	kindCounts := map[string]int{}
+	toolCounts := map[string]int{}
+	for _, e := range entries {
+		kindCounts[entryKind(e)]++
+		for _, b := range e.blocks {
+			switch b.kind {
+			case thinkingKind:
+				kindCounts[thinkingKind]++
+			case "tool_use":
+				toolCounts[toolFilterName(b.toolName)]++
+			}
+		}
+	}
+
+	for _, k := range messageKinds {
+		if n := kindCounts[k.key]; n > 0 {
+			kinds = append(kinds, filterRow{selector: attrSelector("data-kind", k.key), label: k.label, count: n})
+		}
+	}
+	if n := kindCounts[thinkingKind]; n > 0 {
+		kinds = append(kinds, filterRow{selector: attrSelector("data-kind", thinkingKind), label: "💭 Thinking", count: n})
+	}
+
+	names := make([]string, 0, len(toolCounts))
+	for name := range toolCounts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		tools = append(tools, filterRow{
+			selector: attrSelector("data-tool", name),
+			label:    toolIcon(name) + " " + name,
+			count:    toolCounts[name],
+		})
+	}
+	return kinds, tools
+}
+
+// attrSelector builds a CSS attribute selector, escaping the value the way
+// a CSS string literal requires.
+func attrSelector(attr, value string) string {
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	return fmt.Sprintf(`[%s="%s"]`, attr, escaped)
+}
+
+// renderFilterPane renders the sidebar of checkboxes that show and hide
+// message kinds and individual tools.
+func renderFilterPane(kinds, tools []filterRow) string {
+	var b strings.Builder
+	b.WriteString(`<aside class="filters">` + "\n")
+	b.WriteString(`<div class="filters-inner">` + "\n")
+	b.WriteString(`<div class="filters-head"><strong>Filter</strong><span class="filter-actions"><button type="button" data-all="1">All</button><button type="button" data-all="0">None</button></span></div>` + "\n")
+	writeFilterGroup(&b, "Messages", kinds)
+	writeFilterGroup(&b, "Tools", tools)
+	b.WriteString("</div>\n</aside>\n")
+	return b.String()
+}
+
+func writeFilterGroup(b *strings.Builder, title string, rows []filterRow) {
+	if len(rows) == 0 {
+		return
+	}
+	b.WriteString(`<div class="filter-group"><div class="filter-group-title">` + html.EscapeString(title) + `</div>` + "\n")
+	for _, r := range rows {
+		fmt.Fprintf(b, `<label class="filter"><input type="checkbox" checked data-sel="%s"><span class="filter-label">%s</span><span class="filter-count">%d</span></label>`+"\n",
+			html.EscapeString(r.selector), html.EscapeString(r.label), r.count)
+	}
+	b.WriteString("</div>\n")
 }
 
 // sessionHeaderInfo carries the page-header metadata for
@@ -477,18 +653,64 @@ func renderTranscriptHTML(meta sessionHeaderInfo, entries []transcriptEntry) str
 	}
 	header.WriteString("</div>\n")
 
+	kinds, tools := collectFilterRows(entries)
+
 	var page strings.Builder
 	page.WriteString("<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>")
 	page.WriteString(html.EscapeString(title))
 	page.WriteString("</title>\n<style>\n")
 	page.WriteString(pageCSS)
-	page.WriteString("\n</style>\n</head>\n<body>\n<div class=\"container\">\n")
+	page.WriteString("\n</style>\n</head>\n<body>\n")
+	page.WriteString("<div class=\"layout\">\n<div class=\"container\">\n")
 	page.WriteString(header.String())
 	page.WriteString(`<div class="messages">` + "\n")
 	page.WriteString(body.String())
-	page.WriteString("\n</div>\n</div>\n</body>\n</html>\n")
+	page.WriteString("\n</div>\n</div>\n")
+	page.WriteString(renderFilterPane(kinds, tools))
+	page.WriteString("</div>\n")
+	// style#filter-style is rewritten by the script as boxes are toggled
+	page.WriteString("<style id=\"filter-style\"></style>\n<script>\n")
+	page.WriteString(filterScript)
+	page.WriteString("\n</script>\n</body>\n</html>\n")
 	return page.String()
 }
+
+// filterScript drives the filter pane: unchecking a box adds its selector
+// to a stylesheet that hides those elements, then any message card left
+// with nothing visible in its body is hidden too, so filtering tools does
+// not leave a trail of empty cards.
+const filterScript = `
+(function () {
+  var style = document.getElementById('filter-style');
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('.filters input[type=checkbox]'));
+
+  function apply() {
+    var hidden = boxes.filter(function (b) { return !b.checked; })
+                      .map(function (b) { return b.dataset.sel; });
+    style.textContent = hidden.length ? hidden.join(',') + '{display:none !important}' : '';
+
+    document.querySelectorAll('.message').forEach(function (card) {
+      card.classList.remove('is-empty');
+      if (getComputedStyle(card).display === 'none') return;
+      var body = card.querySelector('.msg-body');
+      if (!body) return;
+      var visible = Array.prototype.slice.call(body.children).some(function (el) {
+        return getComputedStyle(el).display !== 'none';
+      });
+      if (!visible) card.classList.add('is-empty');
+    });
+  }
+
+  boxes.forEach(function (b) { b.addEventListener('change', apply); });
+  document.querySelectorAll('.filter-actions button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var on = btn.dataset.all === '1';
+      boxes.forEach(function (b) { b.checked = on; });
+      apply();
+    });
+  });
+})();
+`
 
 const pageCSS = `
 :root { color-scheme: light; }
@@ -501,7 +723,70 @@ body {
   font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   line-height: 1.5;
 }
-.container { max-width: 900px; margin: 0 auto; }
+.layout {
+  display: flex;
+  /* No align-items here on purpose: the default "stretch" is what lets the
+     filter card stay in view while scrolling. A sticky element can only
+     travel inside its parent's box, so .filters has to keep the full height
+     of the row -- shrink-wrapping it (align-items: flex-start) leaves the
+     card nowhere to move and silently kills the stickiness. */
+  gap: 1.5rem;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.container { flex: 1; max-width: 900px; min-width: 0; margin: 0 auto; }
+.filters { width: 15rem; flex: none; font-size: 0.85rem; }
+.filters-inner {
+  position: sticky;
+  top: 1rem;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+.filters-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.filter-actions { display: flex; gap: 0.25rem; }
+.filter-actions button {
+  font: inherit;
+  font-size: 0.75rem;
+  color: #4b5563;
+  background: #f3f4f7;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+}
+.filter-actions button:hover { background: #e5e7eb; }
+.filter-group { margin-top: 0.75rem; }
+.filter-group-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+  margin-bottom: 0.25rem;
+}
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  cursor: pointer;
+}
+.filter-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.filter-count { color: #9ca3af; font-variant-numeric: tabular-nums; }
+.message.is-empty { display: none; }
+@media (max-width: 1100px) {
+  .layout { flex-direction: column-reverse; }
+  .filters { width: 100%; max-width: 900px; margin: 0 auto; }
+  .filters-inner { position: static; max-height: none; }
+}
 h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 .meta {
   font-size: 0.85rem;
@@ -521,12 +806,16 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   overflow-x: auto;
 }
-.message-human { border-left-color: #2f6fed; }
-.message-assistant { border-left-color: #8b5cf6; }
-.message-system { border-left-color: #9ca3af; opacity: 0.9; font-size: 0.9rem; }
+/* One tint per speaker, so scrolling the page shows at a glance who is
+   talking. They stay pale: the tool cards, code blocks and <details> inside
+   a message are neutral greys that have to keep reading as neutral on top
+   of any of these. */
+.message-human { border-left-color: #2f6fed; background: #d8e6ff; }
+.message-assistant { border-left-color: #8b5cf6; background: #f2ddfa; }
 /* sub agent reports and monitor events: not the human, but real content
    worth reading, so kept at full size unlike .message-system */
-.message-notification { border-left-color: #d97706; background: #fffbf5; }
+.message-notification { border-left-color: #d97706; background: #fcecc4; }
+.message-system { border-left-color: #6b7280; background: #d9dde7; opacity: 0.9; font-size: 0.9rem; }
 .msg-header {
   display: flex;
   justify-content: space-between;
@@ -535,7 +824,14 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
   margin-bottom: 0.5rem;
   color: #111827;
 }
+.msg-aside { display: flex; align-items: baseline; gap: 0.6rem; font-weight: 400; }
 .msg-time { font-weight: 400; font-size: 0.75rem; color: #9ca3af; }
+.msg-tokens {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .msg-body :first-child { margin-top: 0; }
 .msg-body :last-child { margin-bottom: 0; }
 .msg-body pre {

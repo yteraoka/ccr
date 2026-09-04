@@ -104,7 +104,15 @@ cwd のうち `a-zA-Z0-9` 以外の文字をすべて `-` に置換して照合�
 発言は視覚的に区別され、通常の発言は Markdown としてレンダリングされ、
 コマンドや diff、ファイル内容は syntax highlight されます。sub agent の結果報告や
 monitor イベントなど、harness がユーザーに代わって注入した通知は user の行として
-記録されますが、Human ではなく `🔔 Notification` として表示します。コマンドの実行
+記録されますが、Human ではなく `🔔 Notification` として表示します。
+
+ページ右側の filter pane で表示内容を切り替えられます。メッセージ種別
+(Human / Claude / Notification / System と thinking ブロック)と、実際に呼ばれた
+ツール(Read / Edit / Bash など)ごとに件数付きの checkbox が並び、`All` / `None`
+ボタンで一括切り替えもできます。そのセッションに存在しない種別は行自体が出ません。
+ツールを隠した結果、中身が何も残らなくなった message card も一緒に隠れます。
+トークン使用量が記録されている assistant のターンは、card のヘッダーの timestamp の
+隣に使用量(合計と種別ごとの内訳)を表示します。コマンドの実行
 結果や diff、ファイル内容は既定で折り畳まれており、クリックすると開きます。
 
 このページはファイルには書き出しません。`ccr` は小さなローカル HTTP サーバー
