@@ -49,7 +49,9 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 見やすく区別された自己完結 HTML(light 基調の配色、Markdown レンダリング、コマンド
 実行結果や diff の syntax highlight 付き)として表示するページを `$BROWSER` で
 開きます(`$BROWSER` が未設定の場合、macOS では `open` コマンドにフォールバック
-します)。コマンドの入力やツールの呼び出し内容はそのまま表示されますが、実行結果
+します)。type = "user" の行のうち `promptSource` が `system` のもの(sub agent の
+結果報告や monitor イベントなど、harness が注入した通知)は Human ではなく
+`🔔 Notification` として表示します(`isMeta` の行は従来どおり `⚙️ System`)。コマンドの入力やツールの呼び出し内容はそのまま表示されますが、実行結果
 (output)やファイル内容、diff は既定で折り畳まれており、クリックすると開きます。この
 HTML は `localhost` の 8000 番から順に listen 可能な port を探して起動する単一の
 HTTP サーバーが、リクエストパスの session id (`/<session_id>`)ごとにその場で

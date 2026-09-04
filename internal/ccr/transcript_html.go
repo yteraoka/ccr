@@ -377,7 +377,10 @@ func renderEntry(e transcriptEntry) string {
 
 func renderUserEntry(e transcriptEntry) string {
 	label, cardClass := "🧑 Human", "message message-human"
-	if e.isMeta {
+	switch {
+	case e.isNotification:
+		label, cardClass = "🔔 Notification", "message message-notification"
+	case e.isMeta:
 		label, cardClass = "⚙️ System", "message message-system"
 	}
 	var body strings.Builder
@@ -521,6 +524,9 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 .message-human { border-left-color: #2f6fed; }
 .message-assistant { border-left-color: #8b5cf6; }
 .message-system { border-left-color: #9ca3af; opacity: 0.9; font-size: 0.9rem; }
+/* sub agent reports and monitor events: not the human, but real content
+   worth reading, so kept at full size unlike .message-system */
+.message-notification { border-left-color: #d97706; background: #fffbf5; }
 .msg-header {
   display: flex;
   justify-content: space-between;

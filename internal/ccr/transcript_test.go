@@ -58,11 +58,53 @@ func TestParseTranscript(t *testing.T) {
 	if e2.role != "user" || e2.isMeta || e2.blocks[0].text != "real prompt" {
 		t.Fatalf("entry 2 = %+v, want real prompt", e2)
 	}
+	if e2.isNotification {
+		t.Errorf("entry 2 = %+v, a typed prompt is not a notification", e2)
+	}
 
 	// entry 3: assistant text-only (empty thinking skipped)
 	e3 := entries[3]
 	if e3.role != "assistant" || len(e3.blocks) != 1 || e3.blocks[0].kind != "text" || e3.blocks[0].text != "hello" {
 		t.Fatalf("entry 3 = %+v, want single text block \"hello\"", e3)
+	}
+}
+
+// A sub agent's report reaches the main session as an ordinary user line
+// whose content is a plain string, distinguished only by promptSource, so
+// it must not be attributed to the human.
+func TestParseTranscriptMarksSystemPromptsAsNotifications(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+
+	content := `{"type":"user","promptSource":"typed","timestamp":"2026-07-24T10:00:00Z","message":{"content":"review the diff"}}
+{"type":"user","promptSource":"system","timestamp":"2026-07-24T10:05:00Z","message":{"content":"<task-notification><summary>Agent \"/code-review\" finished</summary></task-notification>"}}
+{"type":"user","promptSource":"suggestion_accepted","timestamp":"2026-07-24T10:06:00Z","message":{"content":"apply the fixes"}}
+{"type":"user","promptSource":"queued","timestamp":"2026-07-24T10:07:00Z","message":{"content":"then commit"}}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := parseTranscript(path)
+	if err != nil {
+		t.Fatalf("parseTranscript: %v", err)
+	}
+	if len(entries) != 4 {
+		t.Fatalf("got %d entries, want 4: %+v", len(entries), entries)
+	}
+
+	if entries[0].isNotification {
+		t.Errorf(`promptSource "typed" marked as a notification: %+v`, entries[0])
+	}
+	if !entries[1].isNotification {
+		t.Errorf(`promptSource "system" not marked as a notification: %+v`, entries[1])
+	}
+	// the other human sources must keep their Human attribution
+	if entries[2].isNotification {
+		t.Errorf(`promptSource "suggestion_accepted" marked as a notification: %+v`, entries[2])
+	}
+	if entries[3].isNotification {
+		t.Errorf(`promptSource "queued" marked as a notification: %+v`, entries[3])
 	}
 }
 

@@ -395,6 +395,25 @@ func TestRenderUserEntryMeta(t *testing.T) {
 	}
 }
 
+func TestRenderUserEntryNotification(t *testing.T) {
+	e := transcriptEntry{
+		role:           "user",
+		isNotification: true,
+		blocks:         []transcriptBlock{{kind: "text", text: "agent finished"}},
+	}
+	got := renderUserEntry(e)
+
+	if !strings.Contains(got, "🔔 Notification") {
+		t.Errorf("renderUserEntry(isNotification) = %q, want Notification label", got)
+	}
+	if strings.Contains(got, "🧑 Human") {
+		t.Errorf("renderUserEntry(isNotification) = %q, must not be attributed to the human", got)
+	}
+	if !strings.Contains(got, "message-notification") {
+		t.Errorf("renderUserEntry(isNotification) = %q, want the notification card class", got)
+	}
+}
+
 func TestRenderAssistantEntryTextThinkingAndTool(t *testing.T) {
 	e := transcriptEntry{
 		role: "assistant",
