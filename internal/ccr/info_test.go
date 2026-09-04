@@ -19,7 +19,7 @@ func TestParseSessionInfoTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, start, end, err := parseSessionInfo(path)
+	_, _, _, start, end, _, err := parseSessionInfo(path)
 	if err != nil {
 		t.Fatalf("parseSessionInfo: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestParseSessionInfoAiTitleAndPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cwd, aiTitle, prompts, _, _, err := parseSessionInfo(path)
+	cwd, aiTitle, prompts, _, _, _, err := parseSessionInfo(path)
 	if err != nil {
 		t.Fatalf("parseSessionInfo: %v", err)
 	}
@@ -68,6 +68,34 @@ func TestParseSessionInfoAiTitleAndPrompts(t *testing.T) {
 		if prompts[i] != want[i] {
 			t.Errorf("prompts[%d] = %q, want %q", i, prompts[i], want[i])
 		}
+	}
+}
+
+func TestParseSessionInfoTokenUsage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	content := `{"type":"user","cwd":"/tmp/proj"}
+{"type":"assistant","message":{"id":"msg_1","usage":{"input_tokens":1,"output_tokens":2,"cache_creation_input_tokens":3,"cache_read_input_tokens":4}}}
+{"type":"assistant","message":{"id":"msg_1","usage":{"input_tokens":1,"output_tokens":2,"cache_creation_input_tokens":3,"cache_read_input_tokens":4}}}
+{"type":"assistant","message":{"id":"msg_2","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":30,"cache_read_input_tokens":40}}}
+{"type":"user","message":{"id":"msg_3","usage":{"input_tokens":999,"output_tokens":999}}}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, _, _, usage, err := parseSessionInfo(path)
+	if err != nil {
+		t.Fatalf("parseSessionInfo: %v", err)
+	}
+
+	// msg_1 counted once, msg_2 added, and the non-assistant line ignored.
+	want := tokenUsage{input: 11, output: 22, cacheCreation: 33, cacheRead: 44}
+	if usage != want {
+		t.Errorf("usage = %+v, want %+v", usage, want)
+	}
+	if usage.total() != 110 {
+		t.Errorf("usage.total() = %d, want 110", usage.total())
 	}
 }
 
@@ -118,7 +146,7 @@ func TestParseSessionInfoNoTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, start, end, err := parseSessionInfo(path)
+	_, _, _, start, end, _, err := parseSessionInfo(path)
 	if err != nil {
 		t.Fatalf("parseSessionInfo: %v", err)
 	}
