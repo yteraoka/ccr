@@ -100,7 +100,9 @@ The terminal splits into two panes:
 Pressing `v` on a session renders its entire `jsonl` transcript as a
 self-contained, light-themed HTML page — Human and AI turns are visually
 distinguished, prose is rendered as Markdown, and commands/diffs/file
-content are syntax-highlighted. Command output, diffs, and file content
+content are syntax-highlighted. Notifications the harness injects on your
+behalf (a sub agent reporting its result, a monitor event) arrive as user
+lines but are labelled `🔔 Notification` rather than attributed to you. Command output, diffs, and file content
 are collapsed by default (click to expand) so the page stays scannable.
 
 The page isn't written to a file: `ccr` starts a small local HTTP server

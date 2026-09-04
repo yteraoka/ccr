@@ -12,10 +12,15 @@ import (
 // (or injected system/meta) message, or an assistant turn made of
 // text/thinking/tool_use blocks.
 type transcriptEntry struct {
-	role      string // "user" or "assistant"
-	isMeta    bool
-	timestamp time.Time
-	blocks    []transcriptBlock
+	role   string // "user" or "assistant"
+	isMeta bool
+	// isNotification marks a "user" line the harness injected rather than
+	// the human typing it: a sub agent's report or a monitor event. They
+	// arrive as ordinary user lines, so without this they would be
+	// attributed to the human.
+	isNotification bool
+	timestamp      time.Time
+	blocks         []transcriptBlock
 }
 
 // transcriptBlock is one piece of an entry: prose text, a thinking block,
@@ -45,12 +50,21 @@ type toolOutcome struct {
 
 // rawLine is the subset of a jsonl line needed to route parsing.
 type rawLine struct {
-	Type          string          `json:"type"`
-	IsMeta        bool            `json:"isMeta"`
+	Type   string `json:"type"`
+	IsMeta bool   `json:"isMeta"`
+	// PromptSource says where a user line came from: "typed",
+	// "suggestion_accepted" and "queued" are the human, while "system" is
+	// the harness injecting a notification.
+	PromptSource  string          `json:"promptSource"`
 	Timestamp     string          `json:"timestamp"`
 	Message       json.RawMessage `json:"message"`
 	ToolUseResult json.RawMessage `json:"toolUseResult"`
 }
+
+// promptSourceSystem is the promptSource of a user line the harness
+// injected on the human's behalf, such as a sub agent's result report or a
+// monitor event.
+const promptSourceSystem = "system"
 
 type rawMessage struct {
 	Content json.RawMessage `json:"content"`
@@ -186,10 +200,11 @@ func parseUserLine(raw rawLine, ts time.Time) (transcriptEntry, bool) {
 		return transcriptEntry{}, false
 	}
 	return transcriptEntry{
-		role:      "user",
-		isMeta:    raw.IsMeta,
-		timestamp: ts,
-		blocks:    []transcriptBlock{{kind: "text", text: text}},
+		role:           "user",
+		isMeta:         raw.IsMeta,
+		isNotification: raw.PromptSource == promptSourceSystem,
+		timestamp:      ts,
+		blocks:         []transcriptBlock{{kind: "text", text: text}},
 	}, true
 }
 
