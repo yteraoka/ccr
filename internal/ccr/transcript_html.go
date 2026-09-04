@@ -432,7 +432,7 @@ func buildSessionHTML(id, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cwd, aiTitle, _, startTime, endTime, err := parseSessionInfo(path)
+	cwd, aiTitle, _, startTime, endTime, _, err := parseSessionInfo(path)
 	if err != nil {
 		return "", err
 	}

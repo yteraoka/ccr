@@ -14,6 +14,9 @@ type sessionEntry struct {
 	timestamp time.Time
 	cwd       string
 	pid       int // 0 if no live claude process is running this session
+	// tokens is the session's cumulative token usage: input + output +
+	// cache tokens summed across every assistant message.
+	tokens int
 }
 
 // collectSessions walks ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl
@@ -65,7 +68,7 @@ func collectSessionsInDir(dir string) ([]sessionEntry, error) {
 		if err != nil {
 			continue
 		}
-		cwd, lastTimestamp, _ := readSessionCwdAndLastTimestamp(filepath.Join(dir, f.Name()))
+		cwd, usage, lastTimestamp, _ := readSessionSummary(filepath.Join(dir, f.Name()))
 		timestamp := lastTimestamp
 		if timestamp.IsZero() {
 			timestamp = info.ModTime()
@@ -74,6 +77,7 @@ func collectSessionsInDir(dir string) ([]sessionEntry, error) {
 			id:        strings.TrimSuffix(f.Name(), ".jsonl"),
 			timestamp: timestamp,
 			cwd:       cwd,
+			tokens:    usage.total(),
 		})
 	}
 	return entries, nil

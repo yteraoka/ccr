@@ -14,7 +14,13 @@ import (
 
 func TestPreviewViewServingURLAfterEnded(t *testing.T) {
 	end := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	got := previewView("/tmp/proj", 123, "", nil, time.Time{}, end, "http://localhost:8000/abc", nil, 20, 100)
+	got := previewView(previewData{
+		sessionID:  "session-x",
+		cwd:        "/tmp/proj",
+		size:       123,
+		end:        end,
+		servingURL: "http://localhost:8000/abc",
+	}, 20, 100)
 
 	lines := strings.Split(got, "\n")
 	endIdx, servingIdx := -1, -1
@@ -38,14 +44,14 @@ func TestPreviewViewServingURLAfterEnded(t *testing.T) {
 }
 
 func TestPreviewViewNoServingURL(t *testing.T) {
-	got := previewView("/tmp/proj", 123, "", nil, time.Time{}, time.Time{}, "", nil, 20, 100)
+	got := previewView(previewData{sessionID: "session-x", cwd: "/tmp/proj", size: 123}, 20, 100)
 	if strings.Contains(got, "Serving at:") {
 		t.Errorf("did not expect a Serving at: line when servingURL is empty: %s", got)
 	}
 }
 
 func TestPreviewViewError(t *testing.T) {
-	got := previewView("", 0, "", nil, time.Time{}, time.Time{}, "", errors.New("boom"), 20, 40)
+	got := previewView(previewData{sessionID: "session-x", err: errors.New("boom")}, 20, 40)
 	if !strings.HasPrefix(got, "error: ") {
 		t.Errorf("previewView(err) = %q, want it to start with \"error: \"", got)
 	}
@@ -53,7 +59,13 @@ func TestPreviewViewError(t *testing.T) {
 
 func TestPreviewViewWithAiTitleAndStart(t *testing.T) {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	got := previewView("/tmp/proj", 100, "My Title", nil, start, time.Time{}, "", nil, 20, 100)
+	got := previewView(previewData{
+		sessionID: "session-x",
+		cwd:       "/tmp/proj",
+		size:      100,
+		aiTitle:   "My Title",
+		start:     start,
+	}, 20, 100)
 	if !strings.Contains(got, "Title: My Title") {
 		t.Errorf("previewView = %q, want Title: My Title", got)
 	}
@@ -67,7 +79,7 @@ func TestPreviewViewWithAiTitleAndStart(t *testing.T) {
 
 func TestPreviewViewWithPromptsWraps(t *testing.T) {
 	prompts := []string{"first prompt", "a much longer second prompt that needs wrapping across lines"}
-	got := previewView("/tmp/proj", 10, "", prompts, time.Time{}, time.Time{}, "", nil, 40, 20)
+	got := previewView(previewData{sessionID: "session-x", cwd: "/tmp/proj", size: 10, prompts: prompts}, 40, 20)
 	if !strings.Contains(got, "Prompts:") {
 		t.Errorf("previewView = %q, want a Prompts: section", got)
 	}
@@ -82,7 +94,13 @@ func TestPreviewViewWithPromptsWraps(t *testing.T) {
 
 func TestPreviewViewHeightTruncation(t *testing.T) {
 	prompts := []string{"p1", "p2", "p3"}
-	got := previewView("/tmp/proj", 10, "title", prompts, time.Time{}, time.Time{}, "", nil, 3, 40)
+	got := previewView(previewData{
+		sessionID: "session-x",
+		cwd:       "/tmp/proj",
+		size:      10,
+		aiTitle:   "title",
+		prompts:   prompts,
+	}, 3, 40)
 	lines := strings.Split(got, "\n")
 	if len(lines) != 3 {
 		t.Errorf("previewView height-truncated output has %d lines, want 3: %q", len(lines), got)
@@ -111,6 +129,8 @@ func TestTruncateLongStringCutWithEllipsis(t *testing.T) {
 func TestViewProducesListAndPreview(t *testing.T) {
 	setupPreviewFixture(t, "session-a", "/tmp/proj-a")
 	m := newPickerModel([]sessionEntry{{id: "session-a"}})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(pickerModel)
 
 	got := ansi.Strip(m.View().Content)
 	if !strings.Contains(got, "SESSION ID") {
@@ -137,6 +157,117 @@ func TestHumanSize(t *testing.T) {
 		if got := humanSize(c.in); got != c.want {
 			t.Errorf("humanSize(%d) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestHumanCount(t *testing.T) {
+	cases := []struct {
+		in   int
+		want string
+	}{
+		{0, "0"},
+		{999, "999"},
+		{1000, "1.0K"},
+		{1500, "1.5K"},
+		{1000000, "1.0M"},
+		// just below a unit boundary: %.1f rounds up, so these must roll
+		// over to the next unit instead of printing "1000.0K"
+		{999999, "1.0M"},
+		{999999999, "1.0G"},
+	}
+	for _, c := range cases {
+		if got := humanCount(c.in); got != c.want {
+			t.Errorf("humanCount(%d) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestPreviewViewShowsTokenBreakdown(t *testing.T) {
+	p := previewData{
+		sessionID: "session-x",
+		cwd:       "/tmp/proj",
+		size:      123,
+		tokens:    tokenUsage{input: 1200, output: 3400, cacheCreation: 56000, cacheRead: 780000},
+	}
+	got := previewView(p, 20, 200)
+
+	want := "Tokens: 840.6K (in 1.2K / out 3.4K / cache write 56.0K / cache read 780.0K)"
+	if !strings.Contains(got, want) {
+		t.Errorf("previewView = %q, want a line containing %q", got, want)
+	}
+	// the whole line has to survive an 80-column terminal uncut
+	narrow := previewView(p, 20, 80)
+	if !strings.Contains(narrow, want) {
+		t.Errorf("previewView(width=80) = %q, want the token line to fit uncut", narrow)
+	}
+}
+
+func TestViewShowsFullSessionIDWhenListShortensIt(t *testing.T) {
+	id := "0123abcd-4567-89ef-0123-456789abcdef"
+	setupPreviewFixture(t, id, "/tmp/proj-a")
+
+	m := newPickerModel([]sessionEntry{{id: id}})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
+	m = updated.(pickerModel)
+
+	got := ansi.Strip(m.View().Content)
+	if !strings.Contains(got, "Session: "+id) {
+		t.Errorf("View() = %q, want the preview to carry the full session id", got)
+	}
+}
+
+func TestListViewShowsTokensColumn(t *testing.T) {
+	sessions := []sessionEntry{{id: "abc", tokens: 1500}}
+	got := ansi.Strip(listView(sessions, 0, 10, 100))
+
+	if !strings.Contains(got, "TOKENS") {
+		t.Errorf("listView header = %q, want a TOKENS column", got)
+	}
+	if !strings.Contains(got, "1.5K") {
+		t.Errorf("listView = %q, want the session's token count formatted as 1.5K", got)
+	}
+}
+
+func TestListIDWidthShortensOnNarrowTerminals(t *testing.T) {
+	wide := rowPrefixWidth(fullIDWidth) + minCwdWidth
+	if got := listIDWidth(wide); got != fullIDWidth {
+		t.Errorf("listIDWidth(%d) = %d, want the full id width %d", wide, got, fullIDWidth)
+	}
+	if got := listIDWidth(wide - 1); got != shortIDWidth {
+		t.Errorf("listIDWidth(%d) = %d, want the short id width %d", wide-1, got, shortIDWidth)
+	}
+	if got := listIDWidth(80); got != shortIDWidth {
+		t.Errorf("listIDWidth(80) = %d, want the short id width %d", got, shortIDWidth)
+	}
+}
+
+func TestListViewKeepsCwdVisibleOnNarrowTerminal(t *testing.T) {
+	id := "0123abcd-4567-89ef-0123-456789abcdef"
+	sessions := []sessionEntry{{id: id, cwd: "/home/me/projects/my-project", tokens: 1500}}
+
+	narrow := ansi.Strip(listView(sessions, 0, 10, 80))
+	if strings.Contains(narrow, id) {
+		t.Errorf("listView(80) = %q, want the session id shortened", narrow)
+	}
+	if !strings.Contains(narrow, id[:shortIDWidth]) {
+		t.Errorf("listView(80) = %q, want the id's first %d characters", narrow, shortIDWidth)
+	}
+	if !strings.Contains(narrow, "my-project") {
+		t.Errorf("listView(80) = %q, want the full CWD basename to still fit", narrow)
+	}
+	if !strings.Contains(narrow, "ID") {
+		t.Errorf("listView(80) = %q, want a shortened id header", narrow)
+	}
+
+	wide := ansi.Strip(listView(sessions, 0, 10, 120))
+	if !strings.Contains(wide, id) {
+		t.Errorf("listView(120) = %q, want the full session id", wide)
+	}
+	if !strings.Contains(wide, "SESSION ID") {
+		t.Errorf("listView(120) = %q, want the full id header", wide)
+	}
+	if !strings.Contains(wide, "my-project") {
+		t.Errorf("listView(120) = %q, want the CWD basename", wide)
 	}
 }
 
@@ -240,16 +371,29 @@ func TestUpdateQuitKeys(t *testing.T) {
 }
 
 func TestResetPreviewClearsState(t *testing.T) {
-	m := pickerModel{
-		previewCwd: "/tmp/x", previewSize: 42, previewAiTitle: "t",
-		previewPrompts: []string{"p"}, previewStart: time.Now(), previewEnd: time.Now(),
-	}
+	m := pickerModel{preview: previewData{
+		sessionID: "session-x", cwd: "/tmp/x", size: 42, aiTitle: "t",
+		prompts: []string{"p"}, start: time.Now(), end: time.Now(),
+		tokens: tokenUsage{input: 1}, servingURL: "http://localhost:8000/session-x",
+	}}
 	m.resetPreview(nil)
-	if m.previewCwd != "" || m.previewSize != 0 || m.previewAiTitle != "" || m.previewPrompts != nil {
-		t.Errorf("resetPreview did not clear preview fields: %+v", m)
+
+	if m.preview.cwd != "" || m.preview.size != 0 || m.preview.aiTitle != "" || m.preview.prompts != nil {
+		t.Errorf("resetPreview did not clear preview fields: %+v", m.preview)
 	}
-	if !m.previewStart.IsZero() || !m.previewEnd.IsZero() {
-		t.Errorf("resetPreview did not clear start/end times: %+v", m)
+	if !m.preview.start.IsZero() || !m.preview.end.IsZero() {
+		t.Errorf("resetPreview did not clear start/end times: %+v", m.preview)
+	}
+	if m.preview.tokens != (tokenUsage{}) {
+		t.Errorf("resetPreview did not clear token usage: %+v", m.preview)
+	}
+	// the id and serving URL describe the session itself, not what was read
+	// out of it, so they survive
+	if m.preview.sessionID != "session-x" {
+		t.Errorf("resetPreview cleared sessionID: %+v", m.preview)
+	}
+	if m.preview.servingURL != "http://localhost:8000/session-x" {
+		t.Errorf("resetPreview cleared servingURL: %+v", m.preview)
 	}
 }
 
@@ -274,11 +418,11 @@ func TestNewPickerModelLoadsInitialPreview(t *testing.T) {
 	setupPreviewFixture(t, "session-a", "/tmp/proj-a")
 
 	m := newPickerModel([]sessionEntry{{id: "session-a"}})
-	if m.previewCwd != "/tmp/proj-a" {
-		t.Errorf("previewCwd = %q, want /tmp/proj-a", m.previewCwd)
+	if m.preview.cwd != "/tmp/proj-a" {
+		t.Errorf("previewCwd = %q, want /tmp/proj-a", m.preview.cwd)
 	}
-	if m.previewErr != nil {
-		t.Errorf("previewErr = %v, want nil", m.previewErr)
+	if m.preview.err != nil {
+		t.Errorf("previewErr = %v, want nil", m.preview.err)
 	}
 }
 
@@ -298,14 +442,14 @@ func TestLoadPreviewUpdatesOnCursorMove(t *testing.T) {
 	}
 
 	m := newPickerModel([]sessionEntry{{id: "session-a"}, {id: "session-b"}})
-	if m.previewCwd != "/tmp/proj-a" {
-		t.Fatalf("initial previewCwd = %q, want /tmp/proj-a", m.previewCwd)
+	if m.preview.cwd != "/tmp/proj-a" {
+		t.Fatalf("initial previewCwd = %q, want /tmp/proj-a", m.preview.cwd)
 	}
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	pm := updated.(pickerModel)
-	if pm.previewCwd != "/tmp/proj-b" {
-		t.Errorf("previewCwd after moving cursor = %q, want /tmp/proj-b", pm.previewCwd)
+	if pm.preview.cwd != "/tmp/proj-b" {
+		t.Errorf("previewCwd after moving cursor = %q, want /tmp/proj-b", pm.preview.cwd)
 	}
 }
 
@@ -317,7 +461,7 @@ func TestLoadPreviewMissingSessionFileSetsErr(t *testing.T) {
 	}
 
 	m := newPickerModel([]sessionEntry{{id: "does-not-exist"}})
-	if m.previewErr == nil {
+	if m.preview.err == nil {
 		t.Error("expected previewErr to be set for a missing session file")
 	}
 }

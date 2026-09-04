@@ -40,13 +40,16 @@ func findSessionFile(root, sessionID string) (string, error) {
 //     value like uniq(1)
 //   - startTime/endTime: parsed from the first and last lines (in file
 //     order) with a valid "timestamp" field; zero value if none found
-func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string, startTime, endTime time.Time, err error) {
+//   - usage: cumulative token usage, split by kind, summed across every
+//     assistant message and de-duplicated by message id
+func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string, startTime, endTime time.Time, usage tokenUsage, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", nil, time.Time{}, time.Time{}, err
+		return "", "", nil, time.Time{}, time.Time{}, tokenUsage{}, err
 	}
 	defer f.Close() //nolint:errcheck
 
+	seen := make(map[string]bool)
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -70,6 +73,7 @@ func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string
 				prompts = append(prompts, rec.LastPrompt)
 			}
 		}
+		addTokens(seen, rec, &usage)
 		if rec.Timestamp != "" {
 			if t, err := time.Parse(time.RFC3339, rec.Timestamp); err == nil {
 				if startTime.IsZero() {
@@ -80,12 +84,12 @@ func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", "", nil, time.Time{}, time.Time{}, err
+		return "", "", nil, time.Time{}, time.Time{}, tokenUsage{}, err
 	}
 
 	if len(prompts) > 3 {
 		prompts = prompts[len(prompts)-3:]
 	}
 
-	return cwd, aiTitle, prompts, startTime, endTime, nil
+	return cwd, aiTitle, prompts, startTime, endTime, usage, nil
 }

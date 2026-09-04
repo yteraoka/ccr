@@ -12,13 +12,26 @@ Claude Code の session resume をどのディレクトリにいても実行で�
 引数なしで `ccr` を実行すると、対象セッションを、jsonl 内で最後に見つかった
 `timestamp` フィールド(無ければファイルの mtime)の新しい順にソートし、
 ターミナルを上下 pane に分割したインタラクティブ picker を起動します。
-上 pane に `TIMESTAMP / SESSION ID / PID / CWD` の header 行、それに続くセッション
-一覧(上記の timestamp をローカルタイムで、session id、実行中セッションのみ pid、
-cwd の basename)、最下部に使用可能なキーの説明を1行で表示します。下 pane に
+上 pane に `TIMESTAMP / SESSION ID / PID / TOKENS / CWD` の header 行、それに続く
+セッション一覧(上記の timestamp をローカルタイムで、session id、実行中セッション
+のみ pid、TOKENS はセッションの jsonl 中の type = "assistant" の行にある
+`message.usage` の `input_tokens` + `output_tokens` + `cache_creation_input_tokens`
++ `cache_read_input_tokens` を `message.id` で重複除去(同じメッセージが content
+block ごとに複数行に分かれて同じ usage を繰り返すため)した上で合計した値を
+1000 未満はそのまま、1000 以上は小数点1桁 + K/M などの単位で表示、cwd の
+basename)、最下部に使用可能なキーの説明を1行で表示します。
+CWD 列に 20 桁を残せないほどターミナルの幅が狭い場合(75 + 20 = 95 桁未満)は、
+session id を先頭 8 文字に短縮し(header も `ID` に変更)、その分を CWD に
+充てます。幅が足りていれば session id は 36 桁の全体を表示します。下 pane に
 カーソルで選択中の
-セッションのプレビュー(`Directory:` に cwd、`Title:` に type = "ai-title" の
+セッションのプレビュー(`Session:` に session id 全体(一覧側が短縮していても
+常に完全な値)、`Directory:` に cwd、`Title:` に type = "ai-title" の
 最後の行の aiTitle の値(あれば)、`Size:` に session ファイルサイズを human
-readable 形式で、続けて `Started:` / `Ended:` に jsonl 中で最初/最後に見つかった
+readable 形式で、`Tokens:` に上記 TOKENS と同じ合計値に続けて種別ごとの内訳を
+`合計 (in <input_tokens> / out <output_tokens> / cache write
+<cache_creation_input_tokens> / cache read <cache_read_input_tokens>)` の形式で
+(いずれも TOKENS 列と同じ単位表記。80 桁の端末でも折り返さない長さに収めます)、
+続けて `Started:` / `Ended:` に jsonl 中で最初/最後に見つかった
 `timestamp` フィールド(UTC の ISO8601)をローカルタイムに変換して表示(値が
 見つからない場合はその行自体を表示しません)、`v` で既にサーバーが起動済みなら
 `Ended:` の直後に `Serving at: <url>` を表示、その後に `Prompts:` に続けて

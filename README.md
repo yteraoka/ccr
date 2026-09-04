@@ -70,11 +70,15 @@ The terminal splits into two panes:
 - **Top pane** — sessions sorted by recency (most recently active first),
   with columns `TIMESTAMP` (local time), `SESSION ID`, `PID` (only shown
   for sessions with a currently running `claude` process — see below),
-  and `CWD` (basename). The bottom line of this pane shows the available
-  keys.
-- **Bottom pane** — a live preview of the highlighted session: directory,
-  title (if Claude Code has generated one), file size, start/end time,
-  and the last few prompts you sent in that session.
+  `TOKENS` (cumulative token usage across the session's assistant messages),
+  and `CWD` (basename). On a terminal too narrow to fit both (under 95
+  columns), the session id is shortened to its first 8 characters so `CWD`
+  stays readable. The bottom line of this pane shows the available keys.
+- **Bottom pane** — a live preview of the highlighted session: its full
+  session id (even when the list above shortens it), directory, title (if
+  Claude Code has generated one), file size, token usage broken down by
+  kind (in / out / cache write / cache read) behind the total, start/end
+  time, and the last few prompts you sent in that session.
 
 ### Keybindings
 
