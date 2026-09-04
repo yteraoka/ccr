@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.0.7](https://github.com/yteraoka/ccr/compare/v0.0.6...v0.0.7) - 2026-09-04
+
+- Update dependency go to v1.27.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/55
+- Update module github.com/mattn/go-runewidth to v0.0.29 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/57
+- Update Songmu/tagpr action to v1.20.3 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/58
+- Update module github.com/yuin/goldmark to v1.8.6 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/48
+- Show session token usage in the picker by @yteraoka in https://github.com/yteraoka/ccr/pull/59
+- Stop attributing harness notifications to the human by @yteraoka in https://github.com/yteraoka/ccr/pull/60
+- Add a filter pane and per-turn token usage to the transcript page by @yteraoka in https://github.com/yteraoka/ccr/pull/61
+- Link sub agent transcripts from the session page by @yteraoka in https://github.com/yteraoka/ccr/pull/62
+
 ## [v0.0.6](https://github.com/yteraoka/ccr/compare/v0.0.5...v0.0.6) - 2026-08-29
 
 - Rename tagpr app credentials to TAGPR_ prefixed names by @yteraoka in https://github.com/yteraoka/ccr/pull/53
