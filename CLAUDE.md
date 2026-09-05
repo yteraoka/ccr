@@ -51,7 +51,10 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 開きます(`$BROWSER` が未設定の場合、macOS では `open` コマンドにフォールバック
 します)。type = "user" の行のうち `promptSource` が `system` のもの(sub agent の
 結果報告や monitor イベントなど、harness が注入した通知)は Human ではなく
-`🔔 Notification` として表示します(`isMeta` の行は従来どおり `⚙️ System`)。コマンドの入力やツールの呼び出し内容はそのまま表示されますが、実行結果
+`🔔 Notification` として表示します(`isMeta` の行は従来どおり `⚙️ System`)。
+各 card のラベルのアイコンは Human が `🐰`、Claude は Claude のマーク(coral
+`#d97757` の放射状のシンボル)をインライン SVG で描画したものを使います
+(自己完結ページを保つため外部画像は使いません)。コマンドの入力やツールの呼び出し内容はそのまま表示されますが、実行結果
 (output)やファイル内容、diff は既定で折り畳まれており、クリックすると開きます。
 tool 呼び出しだけからなる assistant のターンが連続する範囲は、1つの折り畳み
 (`N tool calls`、既定で閉じた状態)にまとめ、その中で各ターンをさらに折り畳んだ
