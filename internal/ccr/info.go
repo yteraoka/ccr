@@ -31,6 +31,23 @@ func findSessionFile(root, sessionID string) (string, error) {
 	return "", fmt.Errorf("session not found: %s", sessionID)
 }
 
+// sessionInfo is what one scan of a session file yields. It is a struct
+// rather than a row of return values because the scan keeps growing what
+// it can report.
+type sessionInfo struct {
+	cwd     string
+	aiTitle string
+	prompts []string
+	// startTime and endTime come from the first and last lines with a
+	// usable timestamp; zero when the file has none.
+	startTime time.Time
+	endTime   time.Time
+	usage     tokenUsage
+	// cost is the last "cost-state" line, which supersedes the ones before
+	// it. It is nil when the file records none.
+	cost *costState
+}
+
 // parseSessionInfo scans a session JSONL file and extracts:
 //   - cwd: from the first line containing a non-empty "cwd" field
 //   - aiTitle: the value of "aiTitle" from the last line where
@@ -42,10 +59,13 @@ func findSessionFile(root, sessionID string) (string, error) {
 //     order) with a valid "timestamp" field; zero value if none found
 //   - usage: cumulative token usage, split by kind, summed across every
 //     assistant message and de-duplicated by message id
-func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string, startTime, endTime time.Time, usage tokenUsage, err error) {
+//   - cost: the last "cost-state" line, if the file has any
+func parseSessionInfo(path string) (sessionInfo, error) {
+	var info sessionInfo
+
 	f, err := os.Open(path)
 	if err != nil {
-		return "", "", nil, time.Time{}, time.Time{}, tokenUsage{}, err
+		return sessionInfo{}, err
 	}
 	defer f.Close() //nolint:errcheck
 
@@ -62,34 +82,42 @@ func parseSessionInfo(path string) (cwd string, aiTitle string, prompts []string
 			continue
 		}
 
-		if cwd == "" && rec.Cwd != "" {
-			cwd = rec.Cwd
+		if info.cwd == "" && rec.Cwd != "" {
+			info.cwd = rec.Cwd
 		}
 		if rec.Type == "ai-title" && rec.AiTitle != "" {
-			aiTitle = rec.AiTitle
+			info.aiTitle = rec.AiTitle
 		}
 		if rec.Type == "last-prompt" && rec.LastPrompt != "" {
-			if len(prompts) == 0 || prompts[len(prompts)-1] != rec.LastPrompt {
-				prompts = append(prompts, rec.LastPrompt)
+			if len(info.prompts) == 0 || info.prompts[len(info.prompts)-1] != rec.LastPrompt {
+				info.prompts = append(info.prompts, rec.LastPrompt)
 			}
 		}
-		addTokens(seen, rec, &usage)
+		if rec.Type == "cost-state" {
+			// decoded separately: only these lines carry it, and it is far
+			// more than the rest of the scan needs from a line
+			var cost costState
+			if err := json.Unmarshal(line, &cost); err == nil {
+				info.cost = &cost
+			}
+		}
+		addTokens(seen, rec, &info.usage)
 		if rec.Timestamp != "" {
 			if t, err := time.Parse(time.RFC3339, rec.Timestamp); err == nil {
-				if startTime.IsZero() {
-					startTime = t
+				if info.startTime.IsZero() {
+					info.startTime = t
 				}
-				endTime = t
+				info.endTime = t
 			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", "", nil, time.Time{}, time.Time{}, tokenUsage{}, err
+		return sessionInfo{}, err
 	}
 
-	if len(prompts) > 3 {
-		prompts = prompts[len(prompts)-3:]
+	if len(info.prompts) > 3 {
+		info.prompts = info.prompts[len(info.prompts)-3:]
 	}
 
-	return cwd, aiTitle, prompts, startTime, endTime, usage, nil
+	return info, nil
 }
