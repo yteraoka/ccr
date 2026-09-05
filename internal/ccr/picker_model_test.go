@@ -479,3 +479,52 @@ func TestListViewKeyLegendIsLastLine(t *testing.T) {
 		t.Errorf("last line = %q, want it to contain the key legend", last)
 	}
 }
+
+func TestPickerOpensAndClosesTheJSONLViewer(t *testing.T) {
+	setupPreviewFixture(t, "session-a", "/tmp/proj-a")
+	m := newPickerModel([]sessionEntry{{id: "session-a"}})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = updated.(pickerModel)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'i'})
+	m = updated.(pickerModel)
+	if m.viewer == nil {
+		t.Fatal("i did not open the jsonl viewer")
+	}
+	got := ansi.Strip(m.View().Content)
+	if !strings.Contains(got, "LINE") || strings.Contains(got, "SESSION ID") {
+		t.Errorf("View() = %q, want the viewer instead of the picker", got)
+	}
+
+	// while it is open the picker's own keys are the viewer's
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
+	m = updated.(pickerModel)
+	if cmd != nil {
+		t.Error("q inside the viewer should return to the picker, not quit ccr")
+	}
+	if m.viewer != nil {
+		t.Error("q did not close the viewer")
+	}
+	if got := ansi.Strip(m.View().Content); !strings.Contains(got, "SESSION ID") {
+		t.Errorf("View() = %q, want the picker back", got)
+	}
+}
+
+func TestPickerJSONLViewerMissingSessionShowsStatus(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	if err := os.MkdirAll(filepath.Join(configDir, "projects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := pickerModel{sessions: []sessionEntry{{id: "does-not-exist"}}}
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'i'})
+	pm := updated.(pickerModel)
+
+	if pm.viewer != nil {
+		t.Error("no viewer should open for a session that cannot be read")
+	}
+	if !strings.HasPrefix(pm.statusMsg, "error: ") {
+		t.Errorf("statusMsg = %q, want the failure reported", pm.statusMsg)
+	}
+}
