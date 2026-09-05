@@ -53,6 +53,22 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 結果報告や monitor イベントなど、harness が注入した通知)は Human ではなく
 `🔔 Notification` として表示します(`isMeta` の行は従来どおり `⚙️ System`)。コマンドの入力やツールの呼び出し内容はそのまま表示されますが、実行結果
 (output)やファイル内容、diff は既定で折り畳まれており、クリックすると開きます。
+tool 呼び出しだけからなる assistant のターンが連続する範囲は、1つの折り畳み
+(`N tool calls`、既定で閉じた状態)にまとめ、その中で各ターンをさらに折り畳んだ
+状態(summary に tool の icon と対象 — Bash は description、無ければコマンドの
+1行目を 80 文字まで、Edit/Write/Read はファイルパス — および timestamp と
+トークン使用量)で並べ、それぞれ個別にトグルで展開できるようにします。連続が
+1件だけの場合は外側のグループを作らず、そのターンの折り畳みのみを置きます。
+折り畳み内の tool 実行が1件のときは、summary と同じ内容になる tool card 側の
+ヘッダー(icon + タイトル)を表示しません。この場合、失敗した実行を示す色
+(文字色と背景色)は tool card のヘッダーではなく折り畳みの summary に付けます。
+1つの折り畳みに複数の tool 実行が含まれる場合は、card を見分ける手段が
+ヘッダーしかないため従来どおり表示します。
+文章を含む assistant のターンは従来どおり card として表示し、そこで連続は途切れます。
+折り畳んだ要素にも `data-kind="assistant"` を付け、filter pane の Claude の
+切り替え対象から外れないようにします。filter でツールを隠した結果、中身が
+すべて隠れた折り畳みとグループも隠し、グループの summary の件数は表示中の
+件数に更新します。
 ページ右側には表示/非表示を切り替える filter pane を置きます。`Messages` グループに
 メッセージ種別(Human / Claude / Notification / System と、assistant の thinking
 ブロック)、`Tools` グループに Read / Edit / Bash など実際に呼ばれたツールを名前順に
