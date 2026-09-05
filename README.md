@@ -87,6 +87,7 @@ The terminal splits into two panes:
 | `↑`/`k`/`p`, `↓`/`j`/`n` | Move the cursor |
 | `Space`/`PageDown`, `b`/`Backspace`/`PageUp` | Page through the list |
 | `g`, `G` | Jump to the first or last session |
+| `/` | Filter the list as you type (id and directory) |
 | `Enter` | Resume the selected session (`cd` + `exec claude --resume <id>`) |
 | `i` | Inspect the selected session's raw `jsonl` without leaving the terminal |
 | `v` | View the full transcript of the selected session in your browser (see below) |
@@ -104,8 +105,17 @@ Pressing `i` opens the selected session's file in a full-screen viewer,
 without leaving the terminal. It lists one row per line — the line number
 in the file, its `type`, its timestamp, and the start of the raw text —
 `n` and `p` step a line, `Space` pages the list down, `b` and `Backspace`
-page it up, and `i` (or `Enter`) opens the line under the cursor as
-pretty-printed JSON, in a modal floating over the list. `Enter` only means resume on the
+page it up, `/` searches it incrementally, and `i` (or `Enter`) opens the
+line under the cursor as pretty-printed JSON, in a modal floating over the
+list.
+
+Filtering works the same on both lists: type and only the matching rows
+stay, with the prompt showing how many of how many. `Enter` ends the
+typing but keeps the list narrowed, so the ordinary keys then move,
+resume and open within it; `Esc` clears the filter, and only then does it
+leave the screen. On the session list a query matches the id and the
+directory; in the file it matches the whole raw line, so `tool_use` or a
+path finds the lines carrying it. `Enter` only means resume on the
 picker's own list, so it is free here.
 
 Inside the modal, `n` and `p` step to the next and previous line and show

@@ -21,7 +21,7 @@ var (
 
 const promptBullet = "·" // U+00B7 MIDDLE DOT, representable in Latin-1
 
-const keyLegend = "j/k/n/p: move  space/b: page  enter: resume  i: jsonl  v: browser  q/esc: quit"
+const keyLegend = "j/k/n/p: move  space/b: page  /: filter  enter: resume  i: jsonl  q: quit"
 
 // previewData is everything the bottom pane shows about the highlighted
 // session. sessionID doubles as loadPreview's cache key: it is filled in
@@ -55,6 +55,11 @@ type pickerModel struct {
 	// stays underneath it and is shown again when it closes.
 	viewer *jsonlViewer
 
+	search incrementalSearch
+	// matches are the indices into sessions the filter leaves showing; the
+	// cursor and every key walk these, not the whole list.
+	matches []int
+
 	statusMsg string
 
 	selected sessionEntry
@@ -78,14 +83,30 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		if m.viewer != nil {
-			if m.viewer.update(msg.String(), m.viewWidth(), m.viewHeight()) {
+			if m.viewer.update(msg.String(), msg.Text, m.viewWidth(), m.viewHeight()) {
 				m.viewer = nil
 			}
 			return m, nil
 		}
+		if changed, handled := m.search.key(msg.String(), msg.Text); handled {
+			if changed {
+				m.refilter()
+			}
+			return m, nil
+		}
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "esc":
+			// esc drops the filter first, and only then leaves ccr
+			if m.search.filtering() {
+				m.search.clear()
+				m.refilter()
+				return m, nil
+			}
 			return m, tea.Quit
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		case "/":
+			m.search.begin()
 		// n and p step a line in the jsonl viewer, so they do the same here
 		case "up", "k", "p":
 			m.moveCursor(-1)
@@ -96,21 +117,33 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "pgdown", "ctrl+d", "space":
 			m.moveCursor(m.listRowCount())
 		case "home", "g":
-			m.moveCursor(-len(m.sessions))
+			m.moveCursor(-len(m.rows()))
 		case "end", "G":
-			m.moveCursor(len(m.sessions))
+			m.moveCursor(len(m.rows()))
 		case "enter":
-			m.selected = m.sessions[m.cursor]
+			session, ok := m.current()
+			if !ok {
+				return m, nil
+			}
+			m.selected = session
 			return m, tea.Quit
 		case "i":
-			viewer, err := newJSONLViewer(m.sessions[m.cursor].id)
+			session, ok := m.current()
+			if !ok {
+				return m, nil
+			}
+			viewer, err := newJSONLViewer(session.id)
 			if err != nil {
 				m.statusMsg = "error: " + err.Error()
 			} else {
 				m.viewer, m.statusMsg = viewer, ""
 			}
 		case "v":
-			url, err := serveAndOpenTranscript(m.sessions[m.cursor].id)
+			session, ok := m.current()
+			if !ok {
+				return m, nil
+			}
+			url, err := serveAndOpenTranscript(session.id)
 			m.preview.servingURL = url
 			if err != nil {
 				m.statusMsg = "error: " + err.Error()
@@ -125,7 +158,12 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // loadPreview parses the currently highlighted session's file so the
 // preview pane can show its directory, file size, and recent prompts.
 func (m *pickerModel) loadPreview() {
-	id := m.sessions[m.cursor].id
+	session, ok := m.current()
+	if !ok {
+		m.preview = previewData{}
+		return
+	}
+	id := session.id
 	if url, ok := runningTranscriptServerURL(id); ok {
 		m.preview.servingURL = url
 	} else {
@@ -191,6 +229,49 @@ func (m pickerModel) viewHeight() int {
 	return m.height
 }
 
+// searchText is what "/" matches a session against: the id and the
+// directory it ran in, which is what the row shows.
+func (m pickerModel) searchText(i int) string {
+	return m.sessions[i].id + " " + m.sessions[i].cwd
+}
+
+// rows are the sessions currently on show: all of them until a filter
+// narrows it.
+func (m *pickerModel) rows() []int {
+	if m.matches == nil {
+		m.matches = m.search.filter(len(m.sessions), m.searchText)
+	}
+	return m.matches
+}
+
+// visibleSessions is what the list draws, in the order it draws them.
+func (m *pickerModel) visibleSessions() []sessionEntry {
+	rows := m.rows()
+	out := make([]sessionEntry, 0, len(rows))
+	for _, i := range rows {
+		out = append(out, m.sessions[i])
+	}
+	return out
+}
+
+// current is the session the cursor is on, and whether there is one: a
+// filter that matches nothing leaves none.
+func (m *pickerModel) current() (sessionEntry, bool) {
+	rows := m.rows()
+	if m.cursor < 0 || m.cursor >= len(rows) {
+		return sessionEntry{}, false
+	}
+	return m.sessions[rows[m.cursor]], true
+}
+
+// refilter rebuilds the visible rows after the query changed, putting the
+// cursor back at the top: the rows under it are not the ones it was on.
+func (m *pickerModel) refilter() {
+	m.matches = m.search.filter(len(m.sessions), m.searchText)
+	m.cursor = 0
+	m.loadPreview()
+}
+
 // paneHeights splits the terminal between the session list and the preview
 // under it. Update needs the same split as View: a page has to move the
 // cursor by exactly what the list is showing.
@@ -224,7 +305,7 @@ func (m *pickerModel) moveCursor(delta int) {
 	if next < 0 {
 		next = 0
 	}
-	if last := len(m.sessions) - 1; next > last {
+	if last := len(m.rows()) - 1; next > last {
 		next = last
 	}
 	if next == m.cursor || next < 0 {
@@ -232,6 +313,15 @@ func (m *pickerModel) moveCursor(delta int) {
 	}
 	m.cursor = next
 	m.loadPreview()
+}
+
+// footerLine is the bottom line of the picker: the search prompt while one
+// is running, and otherwise whatever status there is to report.
+func (m pickerModel) footerLine() string {
+	if m.search.showsPrompt() {
+		return m.search.prompt(len(m.rows()), len(m.sessions))
+	}
+	return m.statusMsg
 }
 
 func (m pickerModel) View() tea.View {
@@ -245,10 +335,10 @@ func (m pickerModel) View() tea.View {
 
 	listHeight, previewHeight := m.paneHeights()
 
-	content := listView(m.sessions, m.cursor, listHeight, width) + "\n" +
+	content := listView(m.visibleSessions(), m.cursor, listHeight, width) + "\n" +
 		strings.Repeat("─", width) + "\n" +
 		previewView(m.preview, previewHeight, width) + "\n" +
-		truncate(m.statusMsg, width)
+		truncate(m.footerLine(), width)
 
 	v := tea.NewView(content)
 	v.AltScreen = true
