@@ -897,3 +897,40 @@ func TestRenderTranscriptHTMLShowsClaudeMarkAndCuteHuman(t *testing.T) {
 		t.Error("want the mark drawn in Anthropic's coral")
 	}
 }
+
+func TestRenderRawJSONButtonCarriesTheSpanOnly(t *testing.T) {
+	got := renderRawJSONButton(lineSpan{offset: 1234, length: 56})
+	for _, want := range []string{`class="raw-json"`, `data-offset="1234"`, `data-len="56"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderRawJSONButton = %q, want %q", got, want)
+		}
+	}
+
+	// a line whose location is unknown gets no control rather than a broken one
+	if got := renderRawJSONButton(lineSpan{}); got != "" {
+		t.Errorf("renderRawJSONButton(zero) = %q, want nothing", got)
+	}
+}
+
+func TestRenderedEventsOfferTheirOriginalJSON(t *testing.T) {
+	entries := []transcriptEntry{
+		{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi"}}, span: lineSpan{offset: 0, length: 40}},
+		{role: "assistant", blocks: []transcriptBlock{{kind: "text", text: "hello"}}, span: lineSpan{offset: 41, length: 60}},
+		// a folded tool run offers it from its summary
+		{role: "assistant", blocks: []transcriptBlock{{kind: "tool_use", toolName: "Bash"}}, span: lineSpan{offset: 102, length: 70}},
+	}
+	got := renderMessages(entries, subagentLinker{})
+
+	if n := strings.Count(got, `class="raw-json"`); n != 3 {
+		t.Errorf("got %d raw-JSON controls, want one per event", n)
+	}
+	for _, want := range []string{`data-offset="0"`, `data-offset="41"`, `data-offset="102"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered messages missing %q", want)
+		}
+	}
+	// the JSON itself must not be in the page: only where to find it
+	if strings.Contains(got, `data-json=`) {
+		t.Error("the page should carry the location of a line, not its content")
+	}
+}

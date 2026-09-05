@@ -1,6 +1,7 @@
 package ccr
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -249,5 +250,83 @@ func TestParseTranscriptKeepsUsageWhenFirstLineIsDropped(t *testing.T) {
 	}
 	if !entries[0].hasUsage || entries[0].usage.total() != 146 {
 		t.Errorf("entry = %+v, want the message's usage carried over to the rendered line", entries[0])
+	}
+}
+
+// The page carries only where each event's jsonl line is, so those spans
+// have to land exactly on the line in the file.
+func TestReadJSONLLinesRecordsWhereEachLineIs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+
+	first := `{"type":"user","message":{"content":"最初"}}`
+	second := `{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}`
+	// blank lines, indentation and \r\n all have to be accounted for
+	content := first + "\r\n\n   " + second + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	lines, err := readJSONLLines(path)
+	if err != nil {
+		t.Fatalf("readJSONLLines: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2", len(lines))
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{first, second} {
+		span := lines[i].span
+		if !span.ok() {
+			t.Errorf("line %d has no span", i)
+			continue
+		}
+		got := string(raw[span.offset : span.offset+int64(span.length)])
+		if got != want {
+			t.Errorf("line %d span points at %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestParseTranscriptCarriesSpansOntoEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	content := `{"type":"user","message":{"content":"prompt"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"reply"}]}}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := parseTranscript(path)
+	if err != nil {
+		t.Fatalf("parseTranscript: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2", len(entries))
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, e := range entries {
+		if !e.span.ok() {
+			t.Fatalf("entry %d has no span: %+v", i, e)
+		}
+		line := string(raw[e.span.offset : e.span.offset+int64(e.span.length)])
+		if !json.Valid([]byte(line)) {
+			t.Errorf("entry %d span does not cover valid JSON: %q", i, line)
+		}
+	}
+	if entries[0].span.offset != 0 {
+		t.Errorf("first entry starts at %d, want 0", entries[0].span.offset)
+	}
+	if entries[1].span.offset <= entries[0].span.offset {
+		t.Error("the second entry should start after the first")
 	}
 }

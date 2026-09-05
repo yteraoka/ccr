@@ -631,6 +631,7 @@ func renderToolRun(e transcriptEntry, links subagentLinker) string {
 	if !e.timestamp.IsZero() {
 		aside.WriteString(`<span class="msg-time">` + html.EscapeString(e.timestamp.Local().Format("2006-01-02 15:04:05")) + `</span>`)
 	}
+	aside.WriteString(renderRawJSONButton(e.span))
 
 	class := "tool-run"
 	// With a single call the summary already says everything the card's own
@@ -677,6 +678,7 @@ func renderUserEntry(e transcriptEntry, links subagentLinker) string {
 		kind: lookupMessageKind(entryKind(e)),
 		ts:   e.timestamp,
 		body: body.String(),
+		span: e.span,
 	})
 }
 
@@ -702,11 +704,23 @@ func renderAssistantEntry(e transcriptEntry, links subagentLinker) string {
 		kind: lookupMessageKind("assistant"),
 		ts:   e.timestamp,
 		body: body.String(),
+		span: e.span,
 	}
 	if e.hasUsage {
 		card.tokens = formatTokenUsage(e.usage)
 	}
 	return renderMessageCard(card)
+}
+
+// renderRawJSONButton renders the control that reveals an event's original
+// jsonl line. It carries only where the line is; the page fetches the bytes
+// from the server when the reader asks for them.
+func renderRawJSONButton(span lineSpan) string {
+	if !span.ok() {
+		return ""
+	}
+	return fmt.Sprintf(`<button type="button" class="raw-json" data-offset="%d" data-len="%d" title="show the original JSON">{ }</button>`,
+		span.offset, span.length)
 }
 
 // messageCard is one rendered message: its kind (which drives the label,
@@ -717,6 +731,7 @@ type messageCard struct {
 	tokens string
 	ts     time.Time
 	body   string
+	span   lineSpan
 }
 
 func renderMessageCard(c messageCard) string {
@@ -727,6 +742,7 @@ func renderMessageCard(c messageCard) string {
 	if !c.ts.IsZero() {
 		aside.WriteString(`<span class="msg-time">` + html.EscapeString(c.ts.Local().Format("2006-01-02 15:04:05")) + `</span>`)
 	}
+	aside.WriteString(renderRawJSONButton(c.span))
 	return fmt.Sprintf(`<div class="%s" data-kind="%s"><div class="msg-header"><span>%s</span><span class="msg-aside">%s</span></div><div class="msg-body">%s</div></div>`,
 		c.kind.cssClass, html.EscapeString(c.kind.key), c.kind.labelHTML(), aside.String(), c.body)
 }
@@ -1025,6 +1041,71 @@ const filterScript = `
       apply();
     });
   });
+
+  // The original jsonl line for an event is fetched on demand: the page
+  // holds only its offset and length, and the server hands back that slice
+  // of the file.
+  var rawURL = location.pathname.replace(/\/+$/, '') + '/raw';
+
+  function panelFor(btn) {
+    var run = btn.closest('.tool-run');
+    if (run) {
+      var runBody = run.querySelector('.tool-run-body');
+      var existing = runBody.querySelector(':scope > .raw-json-panel');
+      if (existing) return { panel: existing, run: run };
+      var made = document.createElement('pre');
+      made.className = 'raw-json-panel';
+      runBody.appendChild(made);
+      return { panel: made, run: run };
+    }
+    var card = btn.closest('.message');
+    var body = card.querySelector('.msg-body');
+    var next = body.nextElementSibling;
+    if (next && next.classList.contains('raw-json-panel')) return { panel: next };
+    var el = document.createElement('pre');
+    el.className = 'raw-json-panel';
+    body.insertAdjacentElement('afterend', el);
+    return { panel: el };
+  }
+
+  document.querySelectorAll('.raw-json').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      // the button sits inside a <summary>; without this, clicking it would
+      // also toggle the run it belongs to
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      var found = panelFor(btn);
+      var panel = found.panel;
+      if (!panel.hidden && panel.dataset.loaded === '1') {
+        panel.hidden = true;
+        btn.classList.remove('is-on');
+        return;
+      }
+      panel.hidden = false;
+      btn.classList.add('is-on');
+      if (found.run) found.run.open = true;
+      if (panel.dataset.loaded === '1') return;
+
+      panel.textContent = 'loading…';
+      fetch(rawURL + '?offset=' + btn.dataset.offset + '&len=' + btn.dataset.len)
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        })
+        .then(function (text) {
+          try {
+            panel.textContent = JSON.stringify(JSON.parse(text), null, 2);
+          } catch (e) {
+            panel.textContent = text;
+          }
+          panel.dataset.loaded = '1';
+        })
+        .catch(function (e) {
+          panel.textContent = 'could not load the original JSON: ' + e.message;
+        });
+    });
+  });
 })();
 `
 
@@ -1252,6 +1333,35 @@ h1 {
   padding: 0 0.5rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.raw-json {
+  font: inherit;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(42, 36, 56, 0.14);
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.raw-json:hover { background: #ffffff; color: var(--ink); }
+.raw-json.is-on { background: var(--ink); color: #fff6ea; border-color: var(--ink); }
+.raw-json-panel {
+  margin: 0.6rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid rgba(42, 36, 56, 0.15);
+  background: rgba(255, 255, 255, 0.75);
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 22rem;
+  overflow: auto;
 }
 .msg-body :first-child { margin-top: 0; }
 .msg-body :last-child { margin-bottom: 0; }
