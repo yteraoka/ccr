@@ -104,6 +104,14 @@ content are syntax-highlighted. Notifications the harness injects on your
 behalf (a sub agent reporting its result, a monitor event) arrive as user
 lines but are labelled `🔔 Notification` rather than attributed to you.
 
+Runs of back-to-back tool calls are folded into a single collapsed
+`N tool calls` block, with each call collapsed again inside it and
+individually expandable — its summary names the tool and what it acted on,
+so the transcript reads as a conversation until you open one. A failed call
+is coloured on that summary line, so you can spot it without opening
+anything. A turn that also says something keeps its own card and ends the
+run.
+
 A filter pane on the right toggles what the page shows: message kinds
 (Human, Claude, Notification, System, and thinking blocks) and each tool
 that was actually called (Read, Edit, Bash, …), with a count next to each

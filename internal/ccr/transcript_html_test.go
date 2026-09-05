@@ -695,3 +695,172 @@ func TestBuildSubagentHTMLHasBackLink(t *testing.T) {
 		t.Errorf("buildSubagentHTML = %q, want the agent's messages rendered", got)
 	}
 }
+
+func TestRenderMessagesFoldsRunsOfToolCalls(t *testing.T) {
+	bash := func(cmd string) transcriptBlock {
+		return transcriptBlock{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"` + cmd + `","description":"` + cmd + `"}`)}
+	}
+	entries := []transcriptEntry{
+		{role: "user", blocks: []transcriptBlock{{kind: "text", text: "do it"}}},
+		// three tool-only turns in a row: one group of three
+		{role: "assistant", blocks: []transcriptBlock{bash("one")}},
+		{role: "assistant", blocks: []transcriptBlock{bash("two")}},
+		{role: "assistant", blocks: []transcriptBlock{bash("three")}},
+		// a turn that also says something keeps its own card and breaks the run
+		{role: "assistant", blocks: []transcriptBlock{{kind: "text", text: "here is why"}, bash("four")}},
+		// a lone tool-only turn: folded, but not wrapped in a group
+		{role: "assistant", blocks: []transcriptBlock{bash("five")}},
+	}
+
+	got := renderMessages(entries, subagentLinker{})
+
+	if n := strings.Count(got, `class="tool-group"`); n != 1 {
+		t.Errorf("got %d tool groups, want 1", n)
+	}
+	if !strings.Contains(got, `<span class="tool-group-count">3</span>`) {
+		t.Errorf("group summary should say it holds 3 calls: %s", got)
+	}
+	if n := strings.Count(got, `<details class="tool-run`); n != 4 {
+		t.Errorf("got %d folded runs, want 4 (3 grouped + 1 alone)", n)
+	}
+	// the turn with prose stays a normal assistant card, and the lone tool
+	// call is not wrapped in a group of one
+	if n := strings.Count(got, `class="message message-assistant"`); n != 1 {
+		t.Errorf("got %d assistant cards, want 1 (only the turn with prose)", n)
+	}
+	// everything stays reachable: each command is still in the output
+	for _, cmd := range []string{"one", "two", "three", "four", "five"} {
+		if !strings.Contains(got, cmd) {
+			t.Errorf("command %q missing from output", cmd)
+		}
+	}
+}
+
+func TestRenderToolRunSummaryCarriesTitleAndUsage(t *testing.T) {
+	e := transcriptEntry{
+		role: "assistant",
+		blocks: []transcriptBlock{
+			{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"ls","description":"list files"}`)},
+		},
+		usage:     tokenUsage{input: 2, output: 144},
+		hasUsage:  true,
+		timestamp: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+	}
+
+	got := renderToolRun(e, subagentLinker{})
+
+	// the summary has to say what the call was without being opened
+	if !strings.Contains(got, "Bash — list files") {
+		t.Errorf("renderToolRun = %q, want the call described in the summary", got)
+	}
+	if !strings.Contains(got, "msg-tokens") || !strings.Contains(got, "msg-time") {
+		t.Errorf("renderToolRun = %q, want the turn's tokens and timestamp kept", got)
+	}
+	// collapsed by default
+	if strings.Contains(got, "<details class=\"tool-run\" data-kind=\"assistant\" open") {
+		t.Errorf("renderToolRun = %q, want it collapsed", got)
+	}
+}
+
+func TestRenderToolRunKeepsFilterAndSubagentHooks(t *testing.T) {
+	agents := []subagentInfo{{id: "a1", description: "Explore", toolUseID: "toolu_1"}}
+	links := newSubagentLinker(agents, func(a subagentInfo) string { return subagentURL("s1", a.id) })
+	e := transcriptEntry{role: "assistant", blocks: []transcriptBlock{
+		{kind: "tool_use", toolName: "Task", toolUseID: "toolu_1"},
+	}}
+
+	got := renderToolRun(e, links)
+
+	if !strings.Contains(got, `data-tool="Task"`) {
+		t.Errorf("renderToolRun = %q, want the tool card still filterable", got)
+	}
+	if !strings.Contains(got, `href="/s1/subagents/a1"`) {
+		t.Errorf("renderToolRun = %q, want the sub agent link kept", got)
+	}
+}
+
+func TestToolTitleFallsBackToTheCommand(t *testing.T) {
+	withDesc := transcriptBlock{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"ls -la","description":"list files"}`)}
+	if got := toolTitle(withDesc); got != "Bash — list files" {
+		t.Errorf("toolTitle(described) = %q, want the description", got)
+	}
+
+	// no description: the command says more than the bare tool name
+	noDesc := transcriptBlock{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"go test ./...\nsecond line"}`)}
+	if got := toolTitle(noDesc); got != "Bash — go test ./..." {
+		t.Errorf("toolTitle(undescribed) = %q, want the command's first line", got)
+	}
+
+	// and a very long one is cut rather than pushing the summary off-screen
+	long := transcriptBlock{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"` + strings.Repeat("x", 200) + `"}`)}
+	got := toolTitle(long)
+	if !strings.HasSuffix(got, "…") || len([]rune(got)) > toolTitleMaxRunes+len("Bash — ")+1 {
+		t.Errorf("toolTitle(long) = %q (%d runes), want it truncated", got, len([]rune(got)))
+	}
+
+	empty := transcriptBlock{kind: "tool_use", toolName: "Bash", input: []byte(`{}`)}
+	if got := toolTitle(empty); got != "Bash" {
+		t.Errorf("toolTitle(no command) = %q, want %q", got, "Bash")
+	}
+}
+
+func TestRenderToolRunDropsTheRedundantCardHeader(t *testing.T) {
+	e := transcriptEntry{role: "assistant", blocks: []transcriptBlock{
+		{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"ls","description":"list files"}`)},
+	}}
+
+	got := renderToolRun(e, subagentLinker{})
+
+	// the summary carries the title, so the card's own header is suppressed
+	if !strings.Contains(got, "tool-run-single") {
+		t.Errorf("renderToolRun = %q, want the single-call class that hides the card header", got)
+	}
+	// the card's header is still in the markup but suppressed by
+	// .tool-run-single, which keeps it out of find-in-page and selection
+	// too; TestPageCSSHidesHeaderAndColoursFailureOnSingleCallRuns pins the
+	// rule, and the jsdom check confirms it computes to display:none.
+	if !strings.Contains(got, `<div class="tool-header">`) {
+		t.Errorf("renderToolRun = %q, want the card unchanged apart from the hiding class", got)
+	}
+}
+
+func TestRenderToolRunKeepsHeadersWhenItHoldsSeveralCalls(t *testing.T) {
+	e := transcriptEntry{role: "assistant", blocks: []transcriptBlock{
+		{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"ls","description":"first"}`)},
+		{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"pwd","description":"second"}`)},
+	}}
+
+	got := renderToolRun(e, subagentLinker{})
+
+	// with several cards their headers are the only way to tell them apart
+	if strings.Contains(got, "tool-run-single") {
+		t.Errorf("renderToolRun(2 calls) = %q, want the headers kept", got)
+	}
+}
+
+func TestRenderToolRunMovesFailureToTheSummary(t *testing.T) {
+	failed := transcriptEntry{role: "assistant", blocks: []transcriptBlock{
+		{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"false"}`),
+			outcome: &toolOutcome{isError: true, resultContent: []byte(`"boom"`)}},
+	}}
+	if got := renderToolRun(failed, subagentLinker{}); !strings.Contains(got, "tool-run-error") {
+		t.Errorf("renderToolRun(failed) = %q, want the failure marked on the run itself", got)
+	}
+
+	ok := transcriptEntry{role: "assistant", blocks: []transcriptBlock{
+		{kind: "tool_use", toolName: "Bash", input: []byte(`{"command":"true"}`),
+			outcome: &toolOutcome{resultContent: []byte(`"fine"`)}},
+	}}
+	if got := renderToolRun(ok, subagentLinker{}); strings.Contains(got, "tool-run-error") {
+		t.Errorf("renderToolRun(ok) = %q, want no failure marking", got)
+	}
+}
+
+func TestPageCSSHidesHeaderAndColoursFailureOnSingleCallRuns(t *testing.T) {
+	if !strings.Contains(pageCSS, ".tool-run-single .tool-header { display: none; }") {
+		t.Error("pageCSS should hide the repeated card header inside a single-call run")
+	}
+	if !strings.Contains(pageCSS, ".tool-run-error > summary") {
+		t.Error("pageCSS should colour a failed run's summary, since its card header is hidden")
+	}
+}

@@ -251,6 +251,58 @@ func toolFilterName(name string) string {
 	return name
 }
 
+// toolTitleMaxRunes caps a title built from a command, which can run long.
+const toolTitleMaxRunes = 80
+
+// firstLine returns s up to its first newline, trimmed.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
+}
+
+// truncateRunes shortens s to at most max runes, marking where it was cut.
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
+// toolTitle is the one-line description of a tool call: the title its card
+// shows, reused as the summary of the collapsed run it sits in.
+func toolTitle(b transcriptBlock) string {
+	switch b.toolName {
+	case "Bash":
+		var in bashInput
+		_ = json.Unmarshal(b.input, &in)
+		if in.Description != "" {
+			return "Bash — " + in.Description
+		}
+		// no description: the command itself says more than "Bash" does
+		if cmd := firstLine(in.Command); cmd != "" {
+			return "Bash — " + truncateRunes(cmd, toolTitleMaxRunes)
+		}
+		return "Bash"
+	case "Edit":
+		var in editInput
+		_ = json.Unmarshal(b.input, &in)
+		return in.FilePath
+	case "Write":
+		var in writeInput
+		_ = json.Unmarshal(b.input, &in)
+		return in.FilePath
+	case "Read":
+		var in readInput
+		_ = json.Unmarshal(b.input, &in)
+		return in.FilePath
+	default:
+		return toolFilterName(b.toolName)
+	}
+}
+
 func toolIcon(name string) string {
 	if icon, ok := toolIcons[name]; ok {
 		return icon
@@ -321,11 +373,7 @@ func renderBashTool(b transcriptBlock) string {
 		}
 	}
 
-	title := "Bash"
-	if in.Description != "" {
-		title += " — " + in.Description
-	}
-	return toolCard("Bash", title, body.String(), b.outcome != nil && b.outcome.isError)
+	return toolCard("Bash", toolTitle(b), body.String(), b.outcome != nil && b.outcome.isError)
 }
 
 func renderEditTool(b transcriptBlock) string {
@@ -344,7 +392,7 @@ func renderEditTool(b transcriptBlock) string {
 	}
 
 	body := renderCollapsedCodeBlock(diffText, "diff", "Diff")
-	return toolCard("Edit", in.FilePath, body, b.outcome != nil && b.outcome.isError)
+	return toolCard("Edit", toolTitle(b), body, b.outcome != nil && b.outcome.isError)
 }
 
 func renderWriteTool(b transcriptBlock) string {
@@ -360,7 +408,7 @@ func renderWriteTool(b transcriptBlock) string {
 	}
 
 	body := renderCollapsedCodeBlock(content, in.FilePath, "Content")
-	return toolCard("Write", in.FilePath, body, b.outcome != nil && b.outcome.isError)
+	return toolCard("Write", toolTitle(b), body, b.outcome != nil && b.outcome.isError)
 }
 
 func renderReadTool(b transcriptBlock) string {
@@ -379,7 +427,7 @@ func renderReadTool(b transcriptBlock) string {
 	}
 
 	body := renderCollapsedCodeBlock(content, in.FilePath, "Content")
-	return toolCard("Read", in.FilePath, body, b.outcome != nil && b.outcome.isError)
+	return toolCard("Read", toolTitle(b), body, b.outcome != nil && b.outcome.isError)
 }
 
 func renderGenericTool(b transcriptBlock) string {
@@ -387,8 +435,7 @@ func renderGenericTool(b transcriptBlock) string {
 	if b.outcome != nil {
 		body += renderGenericOutcome(*b.outcome)
 	}
-	name := toolFilterName(b.toolName)
-	return toolCard(name, name, body, b.outcome != nil && b.outcome.isError)
+	return toolCard(toolFilterName(b.toolName), toolTitle(b), body, b.outcome != nil && b.outcome.isError)
 }
 
 // messageKind is one filterable class of message: how its card is labelled
@@ -487,6 +534,107 @@ func (l subagentLinker) linkForText(text string) (subagentInfo, bool) {
 func (l subagentLinker) renderSubagentLink(a subagentInfo) string {
 	return fmt.Sprintf(`<a class="subagent-link" href="%s">🧵 %s</a>`,
 		html.EscapeString(l.urlFor(a)), html.EscapeString(a.label()))
+}
+
+// isToolOnlyEntry reports whether an assistant turn is nothing but tool
+// calls. Those are what get folded away: a turn that also says something
+// keeps its own card, since the prose is the part worth reading.
+func isToolOnlyEntry(e transcriptEntry) bool {
+	if e.role != "assistant" || len(e.blocks) == 0 {
+		return false
+	}
+	for _, b := range e.blocks {
+		if b.kind != "tool_use" {
+			return false
+		}
+	}
+	return true
+}
+
+// renderMessages renders the message stream, folding each run of
+// consecutive tool-only turns into one collapsed group so the prose stays
+// scannable. A run of one is rendered as a bare collapsed turn: wrapping it
+// in a group would only cost a second click to reach the same thing.
+func renderMessages(entries []transcriptEntry, links subagentLinker) string {
+	var out strings.Builder
+	var run []transcriptEntry
+
+	flush := func() {
+		switch len(run) {
+		case 0:
+		case 1:
+			out.WriteString(renderToolRun(run[0], links))
+		default:
+			out.WriteString(renderToolGroup(run, links))
+		}
+		run = nil
+	}
+
+	for _, e := range entries {
+		if isToolOnlyEntry(e) {
+			run = append(run, e)
+			continue
+		}
+		flush()
+		out.WriteString(renderEntry(e, links))
+	}
+	flush()
+	return out.String()
+}
+
+// renderToolGroup wraps a run of tool-only turns in one collapsed
+// <details>, each turn collapsed again inside it.
+func renderToolGroup(entries []transcriptEntry, links subagentLinker) string {
+	var body strings.Builder
+	for _, e := range entries {
+		body.WriteString(renderToolRun(e, links))
+	}
+	// data-kind marks these as the assistant turns they are, so the Claude
+	// switch in the filter pane keeps covering them once they are folded.
+	return fmt.Sprintf(`<details class="tool-group" data-kind="assistant"><summary><span class="tool-group-count">%d</span> <span class="tool-group-noun">tool calls</span></summary><div class="tool-group-body">%s</div></details>`,
+		len(entries), body.String())
+}
+
+// renderToolRun renders one tool-only turn as a collapsed <details> whose
+// summary names the calls it holds, keeping the turn's timestamp and token
+// usage visible without opening it.
+func renderToolRun(e transcriptEntry, links subagentLinker) string {
+	var body strings.Builder
+	titles := make([]string, 0, len(e.blocks))
+	for _, b := range e.blocks {
+		body.WriteString(renderToolUse(b))
+		if a, ok := links.linkForToolUse(b.toolUseID); ok {
+			body.WriteString(links.renderSubagentLink(a))
+		}
+		titles = append(titles, toolIcon(b.toolName)+" "+toolTitle(b))
+	}
+
+	var aside strings.Builder
+	if e.hasUsage {
+		aside.WriteString(`<span class="msg-tokens">🎟️ ` + html.EscapeString(formatTokenUsage(e.usage)) + `</span>`)
+	}
+	if !e.timestamp.IsZero() {
+		aside.WriteString(`<span class="msg-time">` + html.EscapeString(e.timestamp.Local().Format("2006-01-02 15:04:05")) + `</span>`)
+	}
+
+	class := "tool-run"
+	// With a single call the summary already says everything the card's own
+	// header would, so the header is dropped and the failure it would have
+	// signalled is carried by the summary instead. A run holding several
+	// calls keeps its headers: there they are the only way to tell the
+	// cards apart.
+	if len(e.blocks) == 1 {
+		class += " tool-run-single"
+	}
+	for _, b := range e.blocks {
+		if b.outcome != nil && b.outcome.isError {
+			class += " tool-run-error"
+			break
+		}
+	}
+
+	return fmt.Sprintf(`<details class="%s" data-kind="assistant"><summary><span class="tool-run-title">%s</span><span class="msg-aside">%s</span></summary><div class="tool-run-body">%s</div></details>`,
+		class, html.EscapeString(strings.Join(titles, " · ")), aside.String(), body.String())
 }
 
 func renderEntry(e transcriptEntry, links subagentLinker) string {
@@ -758,10 +906,7 @@ func renderTranscriptHTML(meta sessionHeaderInfo, entries []transcriptEntry) str
 		title = meta.sessionID
 	}
 
-	var body strings.Builder
-	for _, e := range entries {
-		body.WriteString(renderEntry(e, meta.links))
-	}
+	body := renderMessages(entries, meta.links)
 
 	var header strings.Builder
 	if meta.backLink != "" {
@@ -795,7 +940,7 @@ func renderTranscriptHTML(meta sessionHeaderInfo, entries []transcriptEntry) str
 	page.WriteString("<div class=\"layout\">\n<div class=\"container\">\n")
 	page.WriteString(header.String())
 	page.WriteString(`<div class="messages">` + "\n")
-	page.WriteString(body.String())
+	page.WriteString(body)
 	page.WriteString("\n</div>\n</div>\n")
 	page.WriteString(renderFilterPane(kinds, tools, meta.agents, meta.links))
 	page.WriteString("</div>\n")
@@ -829,6 +974,29 @@ const filterScript = `
         return getComputedStyle(el).display !== 'none';
       });
       if (!visible) card.classList.add('is-empty');
+    });
+
+    // a folded run whose every tool is filtered out has nothing to open,
+    // and a group of only such runs has nothing left either
+    document.querySelectorAll('.tool-run').forEach(function (run) {
+      run.classList.remove('is-empty');
+      var tools = Array.prototype.slice.call(run.querySelectorAll('[data-tool]'));
+      var visible = tools.some(function (el) { return getComputedStyle(el).display !== 'none'; });
+      if (!visible) run.classList.add('is-empty');
+    });
+    document.querySelectorAll('.tool-group').forEach(function (group) {
+      group.classList.remove('is-empty');
+      var runs = Array.prototype.slice.call(group.querySelectorAll('.tool-run'));
+      var shown = runs.filter(function (r) { return getComputedStyle(r).display !== 'none'; });
+      if (!shown.length) {
+        group.classList.add('is-empty');
+        return;
+      }
+      // keep the summary honest about how many calls it still holds
+      var count = group.querySelector('.tool-group-count');
+      var noun = group.querySelector('.tool-group-noun');
+      if (count) count.textContent = shown.length;
+      if (noun) noun.textContent = shown.length === 1 ? 'tool call' : 'tool calls';
     });
   }
 
@@ -912,7 +1080,6 @@ body {
 }
 .filter-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .filter-count { color: #9ca3af; font-variant-numeric: tabular-nums; }
-.message.is-empty { display: none; }
 @media (max-width: 1100px) {
   .layout { flex-direction: column-reverse; }
   .filters { width: 100%; max-width: 900px; margin: 0 auto; }
@@ -960,6 +1127,49 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 }
 .subagent-row:hover { text-decoration: underline; }
 .messages { display: flex; flex-direction: column; gap: 1rem; }
+/* Runs of tool calls are folded away by default so the prose reads as a
+   conversation; open the group to get the individual calls, and open one
+   of those to get its command and output. */
+.tool-group, .messages > .tool-run {
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e4ea;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+.tool-group > summary, .messages > .tool-run > summary {
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tool-group-count { font-variant-numeric: tabular-nums; }
+.tool-group-body { padding: 0 0.75rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.tool-group-body > .tool-run {
+  border-radius: 8px;
+  background: #f8f9fb;
+  border: 1px solid #e2e4ea;
+}
+.tool-run > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  color: #33394a;
+  cursor: pointer;
+}
+.tool-run-title { overflow-wrap: anywhere; font-family: "SFMono-Regular", Consolas, Menlo, monospace; }
+.tool-run > summary .msg-aside { flex: none; }
+.tool-run-body { padding: 0 0.75rem 0.5rem; overflow-x: auto; }
+.tool-run-body > .tool-card:first-child { margin-top: 0; }
+/* the summary of a single-call run already carries the title, so the card
+   repeats nothing; the error colouring it would have shown moves out here */
+.tool-run-single .tool-header { display: none; }
+.tool-run-error > summary { background: #fdecea; color: #b42318; border-radius: 8px; }
+.tool-run-error[open] > summary { border-radius: 8px 8px 0 0; }
+.is-empty { display: none !important; }
 .message {
   border-radius: 10px;
   padding: 1rem 1.25rem;
