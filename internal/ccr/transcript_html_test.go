@@ -344,12 +344,12 @@ func TestRenderEntryUnknownRole(t *testing.T) {
 
 func TestRenderEntryDispatchesByRole(t *testing.T) {
 	userEntry := transcriptEntry{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi"}}}
-	if got := renderEntry(userEntry, subagentLinker{}); !strings.Contains(got, "🧑 Human") {
+	if got := renderEntry(userEntry, subagentLinker{}); !strings.Contains(got, "🐰 Human") {
 		t.Errorf("renderEntry(user) = %q, want it to dispatch to renderUserEntry", got)
 	}
 
 	assistantEntry := transcriptEntry{role: "assistant", blocks: []transcriptBlock{{kind: "text", text: "hi"}}}
-	if got := renderEntry(assistantEntry, subagentLinker{}); !strings.Contains(got, "🤖 Claude") {
+	if got := renderEntry(assistantEntry, subagentLinker{}); !strings.Contains(got, "kind-icon") || !strings.Contains(got, "Claude") {
 		t.Errorf("renderEntry(assistant) = %q, want it to dispatch to renderAssistantEntry", got)
 	}
 }
@@ -380,7 +380,7 @@ func TestBuildSessionHTMLValid(t *testing.T) {
 func TestRenderUserEntryHuman(t *testing.T) {
 	e := transcriptEntry{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi there"}}}
 	got := renderUserEntry(e, subagentLinker{})
-	if !strings.Contains(got, "🧑 Human") {
+	if !strings.Contains(got, "🐰 Human") {
 		t.Errorf("renderUserEntry = %q, want Human label", got)
 	}
 	if !strings.Contains(got, "hi there") {
@@ -407,7 +407,7 @@ func TestRenderUserEntryNotification(t *testing.T) {
 	if !strings.Contains(got, "🔔 Notification") {
 		t.Errorf("renderUserEntry(isNotification) = %q, want Notification label", got)
 	}
-	if strings.Contains(got, "🧑 Human") {
+	if strings.Contains(got, "🐰 Human") {
 		t.Errorf("renderUserEntry(isNotification) = %q, must not be attributed to the human", got)
 	}
 	if !strings.Contains(got, "message-notification") {
@@ -425,7 +425,7 @@ func TestRenderAssistantEntryTextThinkingAndTool(t *testing.T) {
 		},
 	}
 	got := renderAssistantEntry(e, subagentLinker{})
-	if !strings.Contains(got, "🤖 Claude") {
+	if !strings.Contains(got, "kind-icon") || !strings.Contains(got, "Claude") {
 		t.Errorf("renderAssistantEntry = %q, want Claude label", got)
 	}
 	if !strings.Contains(got, "hello") {
@@ -498,7 +498,7 @@ func TestCollectFilterRowsCountsOnlyWhatIsPresent(t *testing.T) {
 	for _, r := range kinds {
 		kindCounts[r.label] = r.count
 	}
-	if kindCounts["🧑 Human"] != 1 || kindCounts["🤖 Claude"] != 2 || kindCounts["💭 Thinking"] != 1 {
+	if kindCounts["🐰 Human"] != 1 || kindCounts[lookupMessageKind("assistant").labelHTML()] != 2 || kindCounts["💭 Thinking"] != 1 {
 		t.Errorf("kind rows = %+v, want 1 human, 2 assistant, 1 thinking", kinds)
 	}
 	// nothing in this transcript is a notification or a system note, so no
@@ -862,5 +862,38 @@ func TestPageCSSHidesHeaderAndColoursFailureOnSingleCallRuns(t *testing.T) {
 	}
 	if !strings.Contains(pageCSS, ".tool-run-error > summary") {
 		t.Error("pageCSS should colour a failed run's summary, since its card header is hidden")
+	}
+}
+
+func TestMessageKindLabelsEscapeTheNameButNotTheIcon(t *testing.T) {
+	// Claude's mark is inline SVG, so labels are written as markup; the
+	// name beside it still has to go through escaping
+	claude := lookupMessageKind("assistant")
+	if !strings.Contains(claude.labelHTML(), "<svg") {
+		t.Errorf("Claude label = %q, want the inline mark", claude.labelHTML())
+	}
+
+	tricky := messageKind{key: "x", icon: "🐰", name: `<script>alert(1)</script>`}
+	if strings.Contains(tricky.labelHTML(), "<script>") {
+		t.Errorf("labelHTML = %q, want the name escaped", tricky.labelHTML())
+	}
+}
+
+func TestRenderTranscriptHTMLShowsClaudeMarkAndCuteHuman(t *testing.T) {
+	entries := []transcriptEntry{
+		{role: "user", blocks: []transcriptBlock{{kind: "text", text: "hi"}}},
+		{role: "assistant", blocks: []transcriptBlock{{kind: "text", text: "hello"}}},
+	}
+	got := renderTranscriptHTML(sessionHeaderInfo{sessionID: "s1"}, entries)
+
+	if !strings.Contains(got, "🐰 Human") {
+		t.Error("want the Human icon in the page")
+	}
+	// the mark appears on the card and again in the filter pane
+	if n := strings.Count(got, `class="kind-icon"`); n != 2 {
+		t.Errorf("got %d Claude marks, want 2 (card + filter row)", n)
+	}
+	if !strings.Contains(got, "#d97757") {
+		t.Error("want the mark drawn in Anthropic's coral")
 	}
 }

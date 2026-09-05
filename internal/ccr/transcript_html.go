@@ -438,21 +438,36 @@ func renderGenericTool(b transcriptBlock) string {
 	return toolCard(toolFilterName(b.toolName), toolTitle(b), body, b.outcome != nil && b.outcome.isError)
 }
 
+// claudeMarkSVG is Claude's own mark, drawn inline so the page stays
+// self-contained: rounded rays bursting from a centre point, in Anthropic's
+// coral. currentColor is deliberately not used — the mark keeps its colour
+// wherever it sits.
+const claudeMarkSVG = `<svg class="kind-icon" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#d97757" stroke-width="2.7" stroke-linecap="round"><path d="M12.00 9.40L12.00 2.40"/><path d="M10.62 9.80L7.65 5.05"/><path d="M9.66 10.86L3.73 7.97"/><path d="M9.41 12.27L4.04 12.84"/><path d="M9.95 13.60L4.59 17.79"/><path d="M11.11 14.44L9.20 19.71"/><path d="M12.54 14.54L14.00 21.39"/><path d="M13.81 13.87L17.56 17.75"/><path d="M14.52 12.63L20.93 14.23"/><path d="M14.47 11.20L19.80 9.47"/><path d="M13.67 10.01L18.04 4.80"/></g></svg>`
+
 // messageKind is one filterable class of message: how its card is labelled
 // and styled, and (via its key) the data-kind the filter pane switches on.
 type messageKind struct {
-	key      string
-	label    string
+	key string
+	// icon is markup, not text: an emoji, or the inline SVG of Claude's
+	// mark. It is written to the page as-is, so it may only ever come from
+	// the constants below.
+	icon     string
+	name     string
 	cssClass string
+}
+
+// labelHTML is the kind's icon and name, ready to write into the page.
+func (k messageKind) labelHTML() string {
+	return k.icon + " " + html.EscapeString(k.name)
 }
 
 // messageKinds lists every message kind in the order the filter pane shows
 // them.
 var messageKinds = []messageKind{
-	{"human", "🧑 Human", "message message-human"},
-	{"assistant", "🤖 Claude", "message message-assistant"},
-	{"notification", "🔔 Notification", "message message-notification"},
-	{"system", "⚙️ System", "message message-system"},
+	{"human", "🐰", "Human", "message message-human"},
+	{"assistant", claudeMarkSVG, "Claude", "message message-assistant"},
+	{"notification", "🔔", "Notification", "message message-notification"},
+	{"system", "⚙️", "System", "message message-system"},
 }
 
 // thinkingKind is the filter key for assistant thinking blocks. They live
@@ -481,7 +496,7 @@ func lookupMessageKind(key string) messageKind {
 			return k
 		}
 	}
-	return messageKind{key: key, label: key, cssClass: "message"}
+	return messageKind{key: key, name: key, cssClass: "message"}
 }
 
 // subagentLinker resolves the sub agents a transcript spawned to the URLs
@@ -713,15 +728,17 @@ func renderMessageCard(c messageCard) string {
 		aside.WriteString(`<span class="msg-time">` + html.EscapeString(c.ts.Local().Format("2006-01-02 15:04:05")) + `</span>`)
 	}
 	return fmt.Sprintf(`<div class="%s" data-kind="%s"><div class="msg-header"><span>%s</span><span class="msg-aside">%s</span></div><div class="msg-body">%s</div></div>`,
-		c.kind.cssClass, html.EscapeString(c.kind.key), html.EscapeString(c.kind.label), aside.String(), c.body)
+		c.kind.cssClass, html.EscapeString(c.kind.key), c.kind.labelHTML(), aside.String(), c.body)
 }
 
 // filterRow is one checkbox in the filter pane: what it hides, how it is
 // labelled, and how many of them the transcript holds.
 type filterRow struct {
 	selector string // CSS selector for the elements it controls
-	label    string
-	count    int
+	// label is markup, so a kind's icon can be an inline SVG. Anything
+	// coming from the transcript (a tool name) must be escaped into it.
+	label string
+	count int
 }
 
 // collectFilterRows walks the entries and returns the filter pane's two
@@ -745,11 +762,11 @@ func collectFilterRows(entries []transcriptEntry) (kinds, tools []filterRow) {
 
 	for _, k := range messageKinds {
 		if n := kindCounts[k.key]; n > 0 {
-			kinds = append(kinds, filterRow{selector: attrSelector("data-kind", k.key), label: k.label, count: n})
+			kinds = append(kinds, filterRow{selector: attrSelector("data-kind", k.key), label: k.labelHTML(), count: n})
 		}
 	}
 	if n := kindCounts[thinkingKind]; n > 0 {
-		kinds = append(kinds, filterRow{selector: attrSelector("data-kind", thinkingKind), label: "💭 Thinking", count: n})
+		kinds = append(kinds, filterRow{selector: attrSelector("data-kind", thinkingKind), label: "💭 " + html.EscapeString("Thinking"), count: n})
 	}
 
 	names := make([]string, 0, len(toolCounts))
@@ -760,7 +777,7 @@ func collectFilterRows(entries []transcriptEntry) (kinds, tools []filterRow) {
 	for _, name := range names {
 		tools = append(tools, filterRow{
 			selector: attrSelector("data-tool", name),
-			label:    toolIcon(name) + " " + name,
+			label:    toolIcon(name) + " " + html.EscapeString(name),
 			count:    toolCounts[name],
 		})
 	}
@@ -811,7 +828,7 @@ func writeFilterGroup(b *strings.Builder, title string, rows []filterRow) {
 	b.WriteString(`<div class="filter-group"><div class="filter-group-title">` + html.EscapeString(title) + `</div>` + "\n")
 	for _, r := range rows {
 		fmt.Fprintf(b, `<label class="filter"><input type="checkbox" checked data-sel="%s"><span class="filter-label">%s</span><span class="filter-count">%d</span></label>`+"\n",
-			html.EscapeString(r.selector), html.EscapeString(r.label), r.count)
+			html.EscapeString(r.selector), r.label, r.count)
 	}
 	b.WriteString("</div>\n")
 }
@@ -1195,6 +1212,14 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
   font-weight: 600;
   margin-bottom: 0.5rem;
   color: #111827;
+}
+/* Claude's mark, sized to sit on the text baseline like the emoji the
+   other kinds use */
+.kind-icon {
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: -0.2em;
+  fill: none;
 }
 .msg-aside { display: flex; align-items: baseline; gap: 0.6rem; font-weight: 400; }
 .msg-time { font-weight: 400; font-size: 0.75rem; color: #9ca3af; }
