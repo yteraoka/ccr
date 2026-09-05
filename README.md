@@ -120,6 +120,12 @@ and a message left with nothing visible is hidden along with its contents.
 Assistant turns that report token usage show it in the card header next to
 the timestamp, broken down the same way as in the picker.
 
+Every event carries a `{ }` button that shows the original jsonl line
+behind it. The JSON is not embedded in the page — that would roughly double
+a transcript already measured in megabytes — so the page holds only the
+line's offset and length and asks the server for those bytes when you press
+the button.
+
 If the session spawned sub agents, each one's own transcript is a click
 away: next to the tool call that started it, on the report it sent back,
 and listed under `Sub agents` in the pane. Those pages render exactly like

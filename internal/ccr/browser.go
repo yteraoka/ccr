@@ -2,6 +2,7 @@ package ccr
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -80,7 +81,7 @@ func startTranscriptServer() (string, error) {
 // the request path ("/<session-id>") or one of the sub agents that session
 // spawned ("/<session-id>/subagents/<agent-id>").
 func handleTranscriptRequest(w http.ResponseWriter, r *http.Request) {
-	sessionID, agentID, err := parseTranscriptPath(r.URL.Path)
+	sessionID, agentID, raw, err := parseTranscriptPath(r.URL.Path)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -92,40 +93,108 @@ func handleTranscriptRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var htmlContent string
-	if agentID == "" {
-		htmlContent, err = buildSessionHTML(sessionID, path)
-	} else {
+	if agentID != "" {
 		agent, ok := findSubagent(path, agentID)
 		if !ok {
 			http.Error(w, "sub agent not found: "+agentID, http.StatusNotFound)
 			return
 		}
-		htmlContent, err = buildSubagentHTML(sessionID, agent)
+		path = agent.path
+		if raw {
+			serveRawLine(w, r, path)
+			return
+		}
+		htmlContent, err := buildSubagentHTML(sessionID, agent)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeHTML(w, htmlContent)
+		return
 	}
+
+	if raw {
+		serveRawLine(w, r, path)
+		return
+	}
+	htmlContent, err := buildSessionHTML(sessionID, path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(htmlContent))
+	writeHTML(w, htmlContent)
 }
 
-// parseTranscriptPath splits a request path into the session id and, for a
-// sub agent page, that agent's id (empty for the session itself). Both ids
-// end up being matched against what's on disk rather than pasted into a
-// path, but they are still rejected here if they contain a separator, so a
-// malformed request fails as a 404 rather than reaching the filesystem.
-func parseTranscriptPath(urlPath string) (sessionID, agentID string, err error) {
+func writeHTML(w http.ResponseWriter, content string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(content))
+}
+
+// maxRawLineBytes bounds a single raw-line request. The page only ever asks
+// for spans it was rendered with, so this is a guard against a hand-made
+// request, not a limit real lines run into.
+const maxRawLineBytes = 16 << 20
+
+// serveRawLine returns one line of the transcript verbatim, named by the
+// byte range the page was rendered with. The range is bounded by the file
+// it is read from, so it can only ever return part of that transcript.
+func serveRawLine(w http.ResponseWriter, r *http.Request, path string) {
+	offset, offErr := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
+	length, lenErr := strconv.Atoi(r.URL.Query().Get("len"))
+	if offErr != nil || lenErr != nil || offset < 0 || length <= 0 || length > maxRawLineBytes {
+		http.Error(w, "bad offset/len", http.StatusBadRequest)
+		return
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	defer f.Close() //nolint:errcheck
+
+	info, err := f.Stat()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if offset+int64(length) > info.Size() {
+		http.Error(w, "range is outside the transcript", http.StatusBadRequest)
+		return
+	}
+
+	buf := make([]byte, length)
+	if _, err := io.ReadFull(io.NewSectionReader(f, offset, int64(length)), buf); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(buf)
+}
+
+// rawPathSuffix is appended to a page's own path to ask for the original
+// jsonl line behind one of its events.
+const rawPathSuffix = "raw"
+
+// parseTranscriptPath splits a request path into the session id, the agent
+// id for a sub agent page (empty for the session itself), and whether it
+// asks for a raw line rather than the page. Both ids end up being matched
+// against what's on disk rather than pasted into a path, but they are still
+// rejected here if they contain a separator, so a malformed request fails
+// as a 404 rather than reaching the filesystem.
+func parseTranscriptPath(urlPath string) (sessionID, agentID string, raw bool, err error) {
 	parts := strings.Split(strings.Trim(urlPath, "/"), "/")
+	if n := len(parts); n > 1 && parts[n-1] == rawPathSuffix {
+		raw, parts = true, parts[:n-1]
+	}
 	switch {
 	case len(parts) == 1 && parts[0] != "":
-		return parts[0], "", nil
+		return parts[0], "", raw, nil
 	case len(parts) == 3 && parts[0] != "" && parts[1] == subagentDirName && parts[2] != "":
-		return parts[0], parts[2], nil
+		return parts[0], parts[2], raw, nil
 	default:
-		return "", "", fmt.Errorf("unrecognized transcript path: %q", urlPath)
+		return "", "", false, fmt.Errorf("unrecognized transcript path: %q", urlPath)
 	}
 }
 

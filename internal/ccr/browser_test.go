@@ -1,6 +1,8 @@
 package ccr
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -248,14 +250,21 @@ func TestParseTranscriptPath(t *testing.T) {
 		path       string
 		wantID     string
 		wantAgent  string
+		wantRaw    bool
 		wantReject bool
 	}{
 		{path: "/session-1", wantID: "session-1"},
 		{path: "/session-1/", wantID: "session-1"},
 		{path: "/session-1/subagents/a111", wantID: "session-1", wantAgent: "a111"},
+		// a page's own path plus /raw asks for one line of its jsonl
+		{path: "/session-1/raw", wantID: "session-1", wantRaw: true},
+		{path: "/session-1/subagents/a111/raw", wantID: "session-1", wantAgent: "a111", wantRaw: true},
 		// anything else is not a page this server serves
 		{path: "/", wantReject: true},
 		{path: "", wantReject: true},
+		// "raw" only means the endpoint when it follows a page path; alone it
+		// is just a session id shape, and the lookup that follows will 404
+		{path: "/raw", wantID: "raw"},
 		{path: "/session-1/subagents", wantReject: true},
 		{path: "/session-1/other/a111", wantReject: true},
 		{path: "/session-1/subagents/a111/extra", wantReject: true},
@@ -263,10 +272,10 @@ func TestParseTranscriptPath(t *testing.T) {
 		{path: "/session-1/subagents/../../../etc/passwd", wantReject: true},
 	}
 	for _, c := range cases {
-		id, agent, err := parseTranscriptPath(c.path)
+		id, agent, raw, err := parseTranscriptPath(c.path)
 		if c.wantReject {
 			if err == nil {
-				t.Errorf("parseTranscriptPath(%q) = (%q, %q), want an error", c.path, id, agent)
+				t.Errorf("parseTranscriptPath(%q) = (%q, %q, %v), want an error", c.path, id, agent, raw)
 			}
 			continue
 		}
@@ -274,8 +283,9 @@ func TestParseTranscriptPath(t *testing.T) {
 			t.Errorf("parseTranscriptPath(%q): %v", c.path, err)
 			continue
 		}
-		if id != c.wantID || agent != c.wantAgent {
-			t.Errorf("parseTranscriptPath(%q) = (%q, %q), want (%q, %q)", c.path, id, agent, c.wantID, c.wantAgent)
+		if id != c.wantID || agent != c.wantAgent || raw != c.wantRaw {
+			t.Errorf("parseTranscriptPath(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				c.path, id, agent, raw, c.wantID, c.wantAgent, c.wantRaw)
 		}
 	}
 }
@@ -346,4 +356,67 @@ func httpGetBody(t *testing.T, url string) string {
 		t.Fatalf("read body: %v", err)
 	}
 	return string(body)
+}
+
+func TestServeRawLineReturnsThatLineOnly(t *testing.T) {
+	const sessionID = "66666666-6666-6666-6666-666666666666"
+	setupFixtureSession(t, sessionID, "first prompt")
+
+	path, err := findSessionFile(projectsDir(), sessionID)
+	if err != nil {
+		t.Fatalf("findSessionFile: %v", err)
+	}
+	lines, err := readJSONLLines(path)
+	if err != nil || len(lines) == 0 {
+		t.Fatalf("readJSONLLines: %v (%d lines)", err, len(lines))
+	}
+	span := lines[0].span
+
+	pageURL, err := serveTranscriptSession(sessionID)
+	if err != nil {
+		t.Fatalf("serveTranscriptSession: %v", err)
+	}
+	rawURL := fmt.Sprintf("%s/raw?offset=%d&len=%d", pageURL, span.offset, span.length)
+
+	body := httpGetBody(t, rawURL)
+	if !json.Valid([]byte(body)) {
+		t.Errorf("raw line is not valid JSON: %q", body)
+	}
+	if !strings.Contains(body, "first prompt") {
+		t.Errorf("raw line = %q, want the fixture's line", body)
+	}
+
+	// the page links to this endpoint rather than embedding the JSON
+	page := httpGetBody(t, pageURL)
+	if !strings.Contains(page, `class="raw-json"`) {
+		t.Error("the page offers no way to ask for the original JSON")
+	}
+}
+
+func TestServeRawLineRejectsRangesOutsideTheTranscript(t *testing.T) {
+	const sessionID = "77777777-7777-7777-7777-777777777777"
+	setupFixtureSession(t, sessionID, "a prompt")
+
+	pageURL, err := serveTranscriptSession(sessionID)
+	if err != nil {
+		t.Fatalf("serveTranscriptSession: %v", err)
+	}
+
+	for _, q := range []string{
+		"?offset=0&len=999999999",   // past the end of the file
+		"?offset=-5&len=10",         // before the start of it
+		"?offset=0&len=0",           // empty
+		"?offset=abc&len=10",        // not a number
+		"?offset=0",                 // no length
+		"?offset=0&len=99999999999", // over the per-request cap
+	} {
+		resp, err := http.Get(pageURL + "/raw" + q)
+		if err != nil {
+			t.Fatalf("GET %s: %v", q, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("GET /raw%s = %d, want %d", q, resp.StatusCode, http.StatusBadRequest)
+		}
+	}
 }

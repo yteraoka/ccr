@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"time"
 )
@@ -27,6 +28,9 @@ type transcriptEntry struct {
 	// zero on the rest; hasUsage says which.
 	usage    tokenUsage
 	hasUsage bool
+	// span locates the jsonl line this entry was built from, so the page
+	// can offer its original JSON without embedding it.
+	span lineSpan
 }
 
 // transcriptBlock is one piece of an entry: prose text, a thinking block,
@@ -65,7 +69,22 @@ type rawLine struct {
 	Timestamp     string          `json:"timestamp"`
 	Message       json.RawMessage `json:"message"`
 	ToolUseResult json.RawMessage `json:"toolUseResult"`
+
+	// span locates this line in the jsonl. The page carries only the
+	// location, not the JSON, and asks the server for the bytes when the
+	// reader wants to see them -- embedding every line would roughly double
+	// a transcript that is already megabytes.
+	span lineSpan
 }
+
+// lineSpan is a byte range within a session's jsonl file.
+type lineSpan struct {
+	offset int64
+	length int
+}
+
+// ok reports whether the span points at anything.
+func (s lineSpan) ok() bool { return s.length > 0 }
 
 // promptSourceSystem is the promptSource of a user line the harness
 // injected on the human's behalf, such as a sub agent's result report or a
@@ -175,7 +194,7 @@ func parseAssistantLine(raw rawLine, ts time.Time, outcomes map[string]toolOutco
 		return transcriptEntry{}, false
 	}
 
-	entry := transcriptEntry{role: "assistant", timestamp: ts}
+	entry := transcriptEntry{role: "assistant", timestamp: ts, span: raw.span}
 	for _, b := range blocks {
 		switch b.Type {
 		case "text":
@@ -236,6 +255,7 @@ func parseUserLine(raw rawLine, ts time.Time) (transcriptEntry, bool) {
 		isNotification: raw.PromptSource == promptSourceSystem,
 		timestamp:      ts,
 		blocks:         []transcriptBlock{{kind: "text", text: text}},
+		span:           raw.span,
 	}, true
 }
 
@@ -248,19 +268,48 @@ func readJSONLLines(path string) ([]rawLine, error) {
 	}
 	defer f.Close() //nolint:errcheck
 
+	// Read through a Reader rather than a Scanner: the byte offset of each
+	// line has to be tracked, and ReadBytes grows for a long line where a
+	// Scanner would need a fixed maximum guessed up front.
 	var lines []rawLine
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
+	r := bufio.NewReaderSize(f, 1024*1024)
+	var offset int64
+	for {
+		chunk, readErr := r.ReadBytes('\n')
+		start := offset
+		offset += int64(len(chunk))
+
+		if line, lead := trimLine(chunk); len(line) > 0 {
+			var raw rawLine
+			if err := json.Unmarshal(line, &raw); err == nil {
+				raw.span = lineSpan{offset: start + int64(lead), length: len(line)}
+				lines = append(lines, raw)
+			}
 		}
-		var raw rawLine
-		if err := json.Unmarshal(line, &raw); err != nil {
-			continue
+
+		if readErr != nil {
+			if readErr == io.EOF {
+				return lines, nil
+			}
+			return lines, readErr
 		}
-		lines = append(lines, raw)
 	}
-	return lines, scanner.Err()
+}
+
+// trimLine strips the whitespace around a raw jsonl line and reports how
+// many bytes were dropped from the front, so the remainder can still be
+// located in the file.
+func trimLine(chunk []byte) (line []byte, lead int) {
+	for lead < len(chunk) && asciiSpace(chunk[lead]) {
+		lead++
+	}
+	end := len(chunk)
+	for end > lead && asciiSpace(chunk[end-1]) {
+		end--
+	}
+	return chunk[lead:end], lead
+}
+
+func asciiSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\v' || c == '\f'
 }
