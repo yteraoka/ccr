@@ -1264,8 +1264,13 @@ h1 {
 }
 .msg-body code { font-family: "SFMono-Regular", Consolas, Menlo, monospace; }
 .msg-body p code, .msg-body li code {
-  background: #ffe8a3;
-  padding: 0.1rem 0.4rem;
+  /* A tint of the ink rather than a colour of its own: inline code is
+     emphasis inside a sentence, not a badge, and the amber here read as
+     the token chip. Being translucent, it also sits correctly on whichever
+     card colour it lands on. */
+  background: rgba(42, 36, 56, 0.08);
+  border: 1px solid rgba(42, 36, 56, 0.12);
+  padding: 0.05rem 0.35rem;
   border-radius: 6px;
   font-weight: 600;
 }
