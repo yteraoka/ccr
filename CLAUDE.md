@@ -59,7 +59,9 @@ lastPrompt の値(同じ値が連続する場合は uniq(1) のように1つに�
 ファイル上の番号を保ちます)。モーダルは q / Esc / i で閉じ(Enter では閉じません)、一覧では q / Esc で
 picker へ戻ります。
 カーソルキー
-(または j/k)で選択を移動し、Enter で選択したセッションの cwd に移動して
+(または `j` / `k`、`n` / `p`)で選択を移動し、space で1画面送り、`b` / Backspace で
+1画面戻し(PageDown / PageUp も同じ)、`g` / `G` で先頭・末尾へ移動できます
+(1画面の移動量は一覧が実際に表示している行数です)。Enter で選択したセッションの cwd に移動して
 exec で `claude --resume <session_id>` を実行します。移動先の cwd に `.envrc` が
 あり `direnv` が PATH 上にあれば、`direnv exec <cwd> claude --resume <session_id>`
 経由で実行し、その環境を読み込みます(direnv 自身が claude に exec するため

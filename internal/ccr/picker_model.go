@@ -21,7 +21,7 @@ var (
 
 const promptBullet = "·" // U+00B7 MIDDLE DOT, representable in Latin-1
 
-const keyLegend = "up/down/j/k: move   enter: resume   i: jsonl   v: transcript   q/esc: quit"
+const keyLegend = "j/k/n/p: move  space/b: page  enter: resume  i: jsonl  v: browser  q/esc: quit"
 
 // previewData is everything the bottom pane shows about the highlighted
 // session. sessionID doubles as loadPreview's cache key: it is filled in
@@ -86,16 +86,19 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-				m.loadPreview()
-			}
-		case "down", "j":
-			if m.cursor < len(m.sessions)-1 {
-				m.cursor++
-				m.loadPreview()
-			}
+		// n and p step a line in the jsonl viewer, so they do the same here
+		case "up", "k", "p":
+			m.moveCursor(-1)
+		case "down", "j", "n":
+			m.moveCursor(1)
+		case "pgup", "ctrl+u", "b", "backspace":
+			m.moveCursor(-m.listRowCount())
+		case "pgdown", "ctrl+d", "space":
+			m.moveCursor(m.listRowCount())
+		case "home", "g":
+			m.moveCursor(-len(m.sessions))
+		case "end", "G":
+			m.moveCursor(len(m.sessions))
 		case "enter":
 			m.selected = m.sessions[m.cursor]
 			return m, tea.Quit
@@ -188,6 +191,49 @@ func (m pickerModel) viewHeight() int {
 	return m.height
 }
 
+// paneHeights splits the terminal between the session list and the preview
+// under it. Update needs the same split as View: a page has to move the
+// cursor by exactly what the list is showing.
+func (m pickerModel) paneHeights() (list, preview int) {
+	height := m.viewHeight()
+	preview = height / 3
+	if preview < 8 {
+		preview = 8
+	}
+	list = height - preview - 2 // separator line + status footer line
+	if list < 2 {
+		list = 2
+	}
+	return list, preview
+}
+
+// listRowCount is how many sessions the list shows at once, which is how
+// far one page moves.
+func (m pickerModel) listRowCount() int {
+	list, _ := m.paneHeights()
+	if rows := list - 2; rows > 0 { // header line + key legend line
+		return rows
+	}
+	return 1
+}
+
+// moveCursor moves the selection by delta, stopping at either end, and
+// refreshes the preview for wherever it lands.
+func (m *pickerModel) moveCursor(delta int) {
+	next := m.cursor + delta
+	if next < 0 {
+		next = 0
+	}
+	if last := len(m.sessions) - 1; next > last {
+		next = last
+	}
+	if next == m.cursor || next < 0 {
+		return
+	}
+	m.cursor = next
+	m.loadPreview()
+}
+
 func (m pickerModel) View() tea.View {
 	width, height := m.viewWidth(), m.viewHeight()
 
@@ -197,14 +243,7 @@ func (m pickerModel) View() tea.View {
 		return v
 	}
 
-	previewHeight := height / 3
-	if previewHeight < 8 {
-		previewHeight = 8
-	}
-	listHeight := height - previewHeight - 2 // separator line + status footer line
-	if listHeight < 2 {
-		listHeight = 2
-	}
+	listHeight, previewHeight := m.paneHeights()
 
 	content := listView(m.sessions, m.cursor, listHeight, width) + "\n" +
 		strings.Repeat("─", width) + "\n" +
@@ -292,7 +331,7 @@ func listView(sessions []sessionEntry, cursor, height, width int) string {
 	for len(lines) < rowHeight {
 		lines = append(lines, "")
 	}
-	return header + "\n" + strings.Join(lines, "\n") + "\n" + legend
+	return strings.Join(append(append([]string{header}, lines...), legend), "\n")
 }
 
 func previewView(p previewData, height, width int) string {
