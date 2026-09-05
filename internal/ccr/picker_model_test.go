@@ -2,6 +2,7 @@ package ccr
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -526,5 +527,119 @@ func TestPickerJSONLViewerMissingSessionShowsStatus(t *testing.T) {
 	}
 	if !strings.HasPrefix(pm.statusMsg, "error: ") {
 		t.Errorf("statusMsg = %q, want the failure reported", pm.statusMsg)
+	}
+}
+
+// n and p step a line in the jsonl viewer, so the session list moves with
+// them too rather than only with j and k.
+func TestPickerStepsWithNAndP(t *testing.T) {
+	sessions := []sessionEntry{{id: "a"}, {id: "b"}, {id: "c"}}
+	m := pickerModel{sessions: sessions}
+
+	step := func(m pickerModel, keys ...rune) pickerModel {
+		for _, k := range keys {
+			updated, _ := m.Update(tea.KeyPressMsg{Code: k})
+			m = updated.(pickerModel)
+		}
+		return m
+	}
+
+	if got := step(m, 'n').cursor; got != 1 {
+		t.Errorf("cursor after n = %d, want 1 (the same as j)", got)
+	}
+	if got := step(m, 'n', 'n', 'p').cursor; got != 1 {
+		t.Errorf("cursor after n n p = %d, want 1 (p matching k)", got)
+	}
+	// they land exactly where j and k do
+	if withNP, withJK := step(m, 'n', 'n', 'p'), step(m, 'j', 'j', 'k'); withNP.cursor != withJK.cursor {
+		t.Errorf("n/p reached %d but j/k reached %d", withNP.cursor, withJK.cursor)
+	}
+	// and they stop at the ends
+	if got := step(m, 'p').cursor; got != 0 {
+		t.Errorf("p at the top = %d, want 0", got)
+	}
+	if got := step(m, 'n', 'n', 'n', 'n').cursor; got != 2 {
+		t.Errorf("n past the bottom = %d, want it clamped to 2", got)
+	}
+}
+
+func TestPickerPagingKeys(t *testing.T) {
+	var sessions []sessionEntry
+	for i := 0; i < 60; i++ {
+		sessions = append(sessions, sessionEntry{id: fmt.Sprintf("s%02d", i)})
+	}
+	m := pickerModel{sessions: sessions, width: 90, height: 30}
+	page := m.listRowCount()
+	if page < 2 || page >= len(sessions) {
+		t.Fatalf("listRowCount = %d, want a usable page for this fixture", page)
+	}
+
+	press := func(m pickerModel, keys ...string) pickerModel {
+		for _, k := range keys {
+			var msg tea.KeyPressMsg
+			switch k {
+			case "space":
+				msg = tea.KeyPressMsg{Code: ' '}
+			case "backspace":
+				msg = tea.KeyPressMsg{Code: tea.KeyBackspace}
+			case "pgdown":
+				msg = tea.KeyPressMsg{Code: tea.KeyPgDown}
+			case "pgup":
+				msg = tea.KeyPressMsg{Code: tea.KeyPgUp}
+			default:
+				msg = tea.KeyPressMsg{Code: rune(k[0])}
+			}
+			updated, _ := m.Update(msg)
+			m = updated.(pickerModel)
+		}
+		return m
+	}
+
+	if got := press(m, "space").cursor; got != page {
+		t.Errorf("cursor after space = %d, want one page down (%d)", got, page)
+	}
+	if got := press(m, "space", "b").cursor; got != 0 {
+		t.Errorf("cursor after space then b = %d, want back at the top", got)
+	}
+	if got := press(m, "space", "backspace").cursor; got != 0 {
+		t.Errorf("cursor after space then backspace = %d, want back at the top", got)
+	}
+
+	// the PageDown/PageUp keys mean what they say, which they did not before
+	if got := press(m, "pgdown").cursor; got != page {
+		t.Errorf("cursor after PageDown = %d, want one page down (%d)", got, page)
+	}
+	if got := press(m, "pgdown", "pgup").cursor; got != 0 {
+		t.Errorf("cursor after PageDown then PageUp = %d, want back at the top", got)
+	}
+	// and space/b stand in for exactly those keys
+	if withSpace, withPgDown := press(m, "space").cursor, press(m, "pgdown").cursor; withSpace != withPgDown {
+		t.Errorf("space reached %d but PageDown reached %d", withSpace, withPgDown)
+	}
+
+	// paging stops at the ends rather than running past them
+	if got := press(m, "b").cursor; got != 0 {
+		t.Errorf("paging up at the top = %d, want 0", got)
+	}
+	deep := press(m, "space", "space", "space", "space", "space", "space", "space", "space")
+	if deep.cursor != len(sessions)-1 {
+		t.Errorf("paging past the bottom = %d, want it clamped to %d", deep.cursor, len(sessions)-1)
+	}
+}
+
+// A page has to move by what the list is actually showing, so View and the
+// paging keys have to agree on the split.
+func TestListRowCountMatchesWhatTheListDraws(t *testing.T) {
+	for _, height := range []int{10, 24, 30, 60} {
+		m := pickerModel{sessions: []sessionEntry{{id: "a"}}, width: 90, height: height}
+		listHeight, _ := m.paneHeights()
+		drawn := strings.Count(listView(m.sessions, 0, listHeight, 90), "\n") + 1
+		if drawn != listHeight {
+			t.Errorf("height %d: the list drew %d lines but was given %d", height, drawn, listHeight)
+		}
+		// the rows a page moves are those lines less the header and legend
+		if got, want := m.listRowCount(), listHeight-2; got != want && want > 0 {
+			t.Errorf("height %d: listRowCount = %d, want %d", height, got, want)
+		}
 	}
 }

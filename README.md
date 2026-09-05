@@ -84,7 +84,9 @@ The terminal splits into two panes:
 
 | Key | Action |
 | --- | --- |
-| `↑`/`k`, `↓`/`j` | Move the cursor |
+| `↑`/`k`/`p`, `↓`/`j`/`n` | Move the cursor |
+| `Space`/`PageDown`, `b`/`Backspace`/`PageUp` | Page through the list |
+| `g`, `G` | Jump to the first or last session |
 | `Enter` | Resume the selected session (`cd` + `exec claude --resume <id>`) |
 | `i` | Inspect the selected session's raw `jsonl` without leaving the terminal |
 | `v` | View the full transcript of the selected session in your browser (see below) |

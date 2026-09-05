@@ -311,7 +311,7 @@ func (v *jsonlViewer) indexView(width, height int) string {
 		if rows > 0 {
 			body[0] = truncate("(no lines in this session file)", width)
 		}
-		return header + "\n" + strings.Join(body, "\n") + "\n" + legend
+		return strings.Join(append(append([]string{header}, body...), legend), "\n")
 	}
 
 	end := v.top + rows
@@ -330,7 +330,7 @@ func (v *jsonlViewer) indexView(width, height int) string {
 	for len(lines) < rows {
 		lines = append(lines, "")
 	}
-	return header + "\n" + strings.Join(lines, "\n") + "\n" + legend
+	return strings.Join(append(append([]string{header}, lines...), legend), "\n")
 }
 
 func formatJSONLRow(number, kind, stamp, content string) string {
