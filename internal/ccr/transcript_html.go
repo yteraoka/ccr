@@ -1029,15 +1029,26 @@ const filterScript = `
 `
 
 const pageCSS = `
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  --ink: #2a2438;
+  --paper: #fff6ea;
+  --line: #2a2438;
+  /* dark enough for the 0.7rem chips and labels it is used on: 6.5:1 on
+     the page, 5.5:1 on the palest card */
+  --muted: #5f566d;
+}
 * { box-sizing: border-box; }
 body {
   margin: 0;
   padding: 2rem 1rem;
-  background: #f3f4f7;
-  color: #1f2430;
-  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  background-color: var(--paper);
+  background-image: radial-gradient(rgba(42, 36, 56, 0.07) 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
+  color: var(--ink);
+  font-family: ui-rounded, "Hiragino Maru Gothic ProN", "Segoe UI Variable Display",
+    -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.6;
 }
 .layout {
   display: flex;
@@ -1051,14 +1062,14 @@ body {
   margin: 0 auto;
 }
 .container { flex: 1; max-width: 900px; min-width: 0; margin: 0 auto; }
-.filters { width: 15rem; flex: none; font-size: 0.85rem; }
+.filters { width: 15.5rem; flex: none; font-size: 0.85rem; }
 .filters-inner {
   position: sticky;
   top: 1rem;
   background: #ffffff;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  border: 1px solid rgba(42, 36, 56, 0.14);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
 }
@@ -1066,152 +1077,154 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
+  font-size: 1rem;
 }
-.filter-actions { display: flex; gap: 0.25rem; }
+.filter-actions { display: flex; gap: 0.3rem; }
 .filter-actions button {
   font: inherit;
   font-size: 0.75rem;
-  color: #4b5563;
-  background: #f3f4f7;
-  border: 1px solid #e5e7eb;
-  border-radius: 5px;
-  padding: 0.1rem 0.4rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: #ffe8a3;
+  border: 1px solid #e6c072;
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
   cursor: pointer;
 }
-.filter-actions button:hover { background: #e5e7eb; }
-.filter-group { margin-top: 0.75rem; }
+.filter-actions button:hover { background: #ffd97a; }
+.filter-actions button:active { transform: translateY(1px); background: #ffcf5e; }
+.filter-group { margin-top: 0.9rem; }
 .filter-group-title {
   font-size: 0.7rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #9ca3af;
-  margin-bottom: 0.25rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
 }
 .filter {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.15rem 0;
+  gap: 0.45rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 999px;
   cursor: pointer;
 }
+.filter:hover { background: #fff2d9; }
+.filters input[type=checkbox] { accent-color: #ff6b4a; width: 1rem; height: 1rem; }
 .filter-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.filter-count { color: #9ca3af; font-variant-numeric: tabular-nums; }
+.filter-count {
+  color: var(--ink);
+  background: #ffe8a3;
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.is-empty { display: none !important; }
 @media (max-width: 1100px) {
   .layout { flex-direction: column-reverse; }
   .filters { width: 100%; max-width: 900px; margin: 0 auto; }
   .filters-inner { position: static; max-height: none; }
 }
-h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+h1 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+  letter-spacing: -0.01em;
+}
 .meta {
   font-size: 0.85rem;
-  color: #6b7280;
+  color: var(--muted);
   margin-bottom: 2rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.5rem;
 }
-.meta strong { color: #374151; }
-.subtitle { font-size: 0.9rem; color: #6b7280; margin-bottom: 0.5rem; }
+.meta > div {
+  background: #ffffff;
+  border: 1px solid rgba(42, 36, 56, 0.14);
+  border-radius: 999px;
+  padding: 0.1rem 0.7rem;
+}
+.meta strong { color: var(--ink); font-weight: 800; }
+.subtitle { font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; font-weight: 700; }
 .back-link {
   display: inline-block;
   font-size: 0.8rem;
-  color: #2f6fed;
+  font-weight: 700;
+  color: var(--ink);
+  background: #ffe8a3;
+  border: 1px solid #e6c072;
+  border-radius: 999px;
+  padding: 0.1rem 0.7rem;
   text-decoration: none;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
 }
-.back-link:hover { text-decoration: underline; }
+.back-link:hover { background: #ffd97a; }
 /* link from a tool call (or the report it produced) to that sub agent's
    own transcript */
 .subagent-link {
   display: inline-block;
-  margin: 0.35rem 0;
-  padding: 0.2rem 0.6rem;
+  margin: 0.4rem 0;
+  padding: 0.15rem 0.7rem;
   border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid #c9b7ee;
+  background: #f3e4ff;
+  border: 1px solid #c4a8ef;
   color: #6d28d9;
   font-size: 0.8rem;
+  font-weight: 700;
   text-decoration: none;
 }
-.subagent-link:hover { background: #f5efff; }
+.subagent-link:hover { background: #e9d3ff; }
 .subagent-row {
   display: block;
-  padding: 0.15rem 0;
+  padding: 0.2rem 0.35rem;
+  border-radius: 999px;
   color: #6d28d9;
+  font-weight: 700;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.subagent-row:hover { text-decoration: underline; }
-.messages { display: flex; flex-direction: column; gap: 1rem; }
-/* Runs of tool calls are folded away by default so the prose reads as a
-   conversation; open the group to get the individual calls, and open one
-   of those to get its command and output. */
-.tool-group, .messages > .tool-run {
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #e2e4ea;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-}
-.tool-group > summary, .messages > .tool-run > summary {
-  padding: 0.6rem 1rem;
-  font-size: 0.85rem;
-  color: #4b5563;
-  font-weight: 600;
-  cursor: pointer;
-}
-.tool-group-count { font-variant-numeric: tabular-nums; }
-.tool-group-body { padding: 0 0.75rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
-.tool-group-body > .tool-run {
-  border-radius: 8px;
-  background: #f8f9fb;
-  border: 1px solid #e2e4ea;
-}
-.tool-run > summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.82rem;
-  color: #33394a;
-  cursor: pointer;
-}
-.tool-run-title { overflow-wrap: anywhere; font-family: "SFMono-Regular", Consolas, Menlo, monospace; }
-.tool-run > summary .msg-aside { flex: none; }
-.tool-run-body { padding: 0 0.75rem 0.5rem; overflow-x: auto; }
-.tool-run-body > .tool-card:first-child { margin-top: 0; }
-/* the summary of a single-call run already carries the title, so the card
-   repeats nothing; the error colouring it would have shown moves out here */
-.tool-run-single .tool-header { display: none; }
-.tool-run-error > summary { background: #fdecea; color: #b42318; border-radius: 8px; }
-.tool-run-error[open] > summary { border-radius: 8px 8px 0 0; }
-.is-empty { display: none !important; }
+.subagent-row:hover { background: #f3e4ff; }
+.messages { display: flex; flex-direction: column; gap: 1.1rem; }
 .message {
-  border-radius: 10px;
+  border-radius: 18px;
   padding: 1rem 1.25rem;
-  border-left: 4px solid transparent;
+  /* kept thin and tinted: the fill and the offset shadow carry the shape,
+     so the outline only has to close it, not announce it */
+  border: 1px solid rgba(42, 36, 56, 0.12);
   background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   overflow-x: auto;
 }
 /* One tint per speaker, so scrolling the page shows at a glance who is
    talking. They stay pale: the tool cards, code blocks and <details> inside
    a message are neutral greys that have to keep reading as neutral on top
    of any of these. */
-.message-human { border-left-color: #2f6fed; background: #d8e6ff; }
-.message-assistant { border-left-color: #8b5cf6; background: #f2ddfa; }
+.message-human { border-color: #aecbfb; background: #d8e6ff; }
+.message-assistant { border-color: #dcbcf0; background: #f2ddfa; }
 /* sub agent reports and monitor events: not the human, but real content
    worth reading, so kept at full size unlike .message-system */
-.message-notification { border-left-color: #d97706; background: #fcecc4; }
-.message-system { border-left-color: #6b7280; background: #d9dde7; opacity: 0.9; font-size: 0.9rem; }
+.message-notification { border-color: #ecd196; background: #fcecc4; }
+.message-system { border-color: #c0c6d4; background: #d9dde7; opacity: 0.9; font-size: 0.9rem; }
 .msg-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: #111827;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 800;
+  margin-bottom: 0.6rem;
+  color: var(--ink);
+}
+.msg-header > span:first-child {
+  /* a soft chip rather than an outlined badge: the card's own tint already
+     says whose turn this is, so the label does not need a frame too */
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  padding: 0.05rem 0.75rem;
+  white-space: nowrap;
 }
 /* Claude's mark, sized to sit on the text baseline like the emoji the
    other kinds use */
@@ -1221,11 +1234,22 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
   vertical-align: -0.2em;
   fill: none;
 }
-.msg-aside { display: flex; align-items: baseline; gap: 0.6rem; font-weight: 400; }
-.msg-time { font-weight: 400; font-size: 0.75rem; color: #9ca3af; }
+.msg-aside { display: flex; align-items: center; gap: 0.4rem; font-weight: 700; flex-wrap: wrap; justify-content: flex-end; }
+.msg-time {
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  white-space: nowrap;
+}
 .msg-tokens {
-  font-size: 0.75rem;
-  color: #6b7280;
+  font-size: 0.7rem;
+  color: #7c3f00;
+  background: #ffe8a3;
+  border: 1px solid #e0b96a;
+  border-radius: 999px;
+  padding: 0 0.5rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1233,60 +1257,127 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 .msg-body :last-child { margin-bottom: 0; }
 .msg-body pre {
   padding: 0.75rem 1rem;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow-x: auto;
   font-size: 0.85rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid rgba(42, 36, 56, 0.15);
 }
 .msg-body code { font-family: "SFMono-Regular", Consolas, Menlo, monospace; }
 .msg-body p code, .msg-body li code {
-  background: #eef0f4;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+  background: #ffe8a3;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  font-weight: 600;
 }
+/* Runs of tool calls are folded away by default so the prose reads as a
+   conversation; open the group to get the individual calls, and open one
+   of those to get its command and output. */
+.tool-group, .messages > .tool-run {
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #cbe0d6;
+}
+.tool-group > summary, .messages > .tool-run > summary {
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+.tool-group > summary:hover, .tool-run > summary:hover { background: #f4fbf8; border-radius: 16px; }
+.tool-group-count {
+  font-variant-numeric: tabular-nums;
+  background: #b8ead4;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+}
+.tool-group-body { padding: 0 0.75rem 0.7rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.tool-group-body > .tool-run {
+  border-radius: 12px;
+  background: #f7fbf9;
+  border: 1px solid #d3e3db;
+}
+.tool-run > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+.tool-run-title { flex: 1; min-width: 0; overflow-wrap: anywhere; font-family: "SFMono-Regular", Consolas, Menlo, monospace; }
+.tool-run > summary .msg-aside { flex: none; }
+.tool-run-body { padding: 0 0.75rem 0.5rem; overflow-x: auto; }
+.tool-run-body > .tool-card:first-child { margin-top: 0; }
+/* Inside a run, the card is just a wrapper holding the command and its
+   output together, and the run already draws the box around them -- so the
+   card contributes no frame of its own, and drops the padding that only
+   existed to sit inside one. */
+.tool-run-body > .tool-card { margin: 0; border: none; background: transparent; }
+.tool-run-body > .tool-card > .tool-body { padding-left: 0; padding-right: 0; }
+/* the summary of a single-call run already carries the title, so the card
+   repeats nothing; the error colouring it would have shown moves out here */
+.tool-run-single .tool-header { display: none; }
+.tool-run-error > summary { background: #ffe0dc; color: #a3241a; border-radius: 10px; }
+/* raised to two classes instead of !important, so the rules after it
+   (an opened run standing down) can still win on source order */
+.tool-run.tool-run-error { border-color: #f08b7f; }
 .tool-card {
   margin: 0.75rem 0;
-  border-radius: 8px;
-  background: #f8f9fb;
-  border: 1px solid #e2e4ea;
+  border-radius: 12px;
+  background: #fbfcfe;
+  border: 1px solid #dbe1eb;
   overflow: hidden;
 }
-.tool-card-error { border-color: #f0b4b8; }
+.tool-card-error { border-color: #f08b7f; }
 .tool-header {
-  padding: 0.5rem 0.9rem;
+  padding: 0.45rem 0.9rem;
   font-size: 0.85rem;
-  font-weight: 600;
-  background: #eef0f5;
-  color: #33394a;
+  font-weight: 800;
+  background: #e8edf7;
+  color: var(--ink);
   font-family: "SFMono-Regular", Consolas, Menlo, monospace;
 }
-.tool-card-error .tool-header { background: #fdecea; color: #b42318; }
-.tool-body { padding: 0.25rem 0.9rem 0.75rem; overflow-x: auto; }
+.tool-card-error .tool-header { background: #ffe0dc; color: #a3241a; }
+.tool-body { padding: 0.3rem 0.9rem 0.75rem; overflow-x: auto; }
 .tool-body pre {
   margin: 0.5rem 0;
-  border-radius: 6px;
+  border-radius: 10px;
   overflow-x: auto;
   font-size: 0.82rem;
   padding: 0.75rem 1rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #dbe1eb;
 }
 details {
   margin: 0.5rem 0;
-  border-radius: 6px;
-  background: #f0f1f4;
-  border: 1px solid #e2e4ea;
+  border-radius: 10px;
+  background: #f4f6fb;
+  border: 1px solid #dbe1eb;
 }
 details > summary {
   padding: 0.35rem 0.75rem;
   font-size: 0.8rem;
-  color: #4b5563;
-  font-weight: 600;
+  color: var(--ink);
+  font-weight: 700;
   cursor: pointer;
+  list-style: none;
 }
-details[open] > summary { border-bottom: 1px solid #e2e4ea; }
-details > pre { margin: 0; border: none; border-radius: 0 0 6px 6px; }
-details.thinking { background: #f5f5fb; border-color: #e4e4f2; font-size: 0.85rem; }
-.thinking-body { padding: 0.1rem 0.75rem 0.6rem; color: #4b5563; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before {
+  content: "▶";
+  display: inline-block;
+  margin-right: 0.4rem;
+  font-size: 0.7em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+details[open] > summary::before { transform: rotate(90deg); }
+details[open] > summary { border-bottom: 1px solid #dbe1eb; }
+.tool-group[open] > summary, .tool-run[open] > summary { border-bottom: 1px solid #dbe1eb; }
+details > pre { margin: 0; border: none; border-radius: 0 0 8px 8px; }
+details.thinking { background: #efe9ff; border-color: #c6b3f0; font-size: 0.85rem; }
+.thinking-body { padding: 0.2rem 0.75rem 0.6rem; color: #4b3f66; }
 .thinking-body :first-child { margin-top: 0; }
 .thinking-body :last-child { margin-bottom: 0; }
 `
