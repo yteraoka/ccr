@@ -86,6 +86,7 @@ The terminal splits into two panes:
 | --- | --- |
 | `↑`/`k`, `↓`/`j` | Move the cursor |
 | `Enter` | Resume the selected session (`cd` + `exec claude --resume <id>`) |
+| `i` | Inspect the selected session's raw `jsonl` without leaving the terminal |
 | `v` | View the full transcript of the selected session in your browser (see below) |
 | `q`, `Esc`, `Ctrl-C` | Quit without doing anything |
 
@@ -94,6 +95,24 @@ The terminal splits into two panes:
 - `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`.
 - `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument. If `BROWSER` is unset, macOS falls back to opening the URL with `open`; on other platforms, an error is shown instead.
 - If a `.envrc` file exists in the destination directory, it is loaded via `direnv exec`.
+
+## Inspecting the raw `jsonl` (`i`)
+
+Pressing `i` opens the selected session's file in a full-screen viewer,
+without leaving the terminal. It lists one row per line — the line number
+in the file, its `type`, its timestamp, and the start of the raw text —
+and `i` (or `Enter`) opens the line under the cursor as pretty-printed
+JSON, in a modal floating over the list. `Enter` only means resume on the
+picker's own list, so it is free here.
+
+Inside the modal, `n` and `p` step to the next and previous line and show
+it straight away, so you can walk the file without closing and reopening
+it at every line; the list behind follows along. `Space` pages down, `b`
+and `Backspace` page back up. The list stays visible behind it,
+dimmed, so opening a line never loses your place in the file. The modal
+wraps to its width and scrolls. Lines that are not valid JSON are listed
+too and shown as they are: seeing them is the point of a raw preview.
+`q`/`Esc` steps back out, first closing the modal and then the viewer.
 
 ## Viewing a full transcript (`v`)
 

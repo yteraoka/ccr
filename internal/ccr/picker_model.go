@@ -21,7 +21,7 @@ var (
 
 const promptBullet = "·" // U+00B7 MIDDLE DOT, representable in Latin-1
 
-const keyLegend = "up/down/j/k: move   enter: resume   v: view transcript   q/esc/ctrl-c: quit"
+const keyLegend = "up/down/j/k: move   enter: resume   i: jsonl   v: transcript   q/esc: quit"
 
 // previewData is everything the bottom pane shows about the highlighted
 // session. sessionID doubles as loadPreview's cache key: it is filled in
@@ -51,6 +51,10 @@ type pickerModel struct {
 
 	preview previewData
 
+	// viewer is the full-screen jsonl preview while it is open; the picker
+	// stays underneath it and is shown again when it closes.
+	viewer *jsonlViewer
+
 	statusMsg string
 
 	selected sessionEntry
@@ -73,6 +77,12 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tea.KeyPressMsg:
+		if m.viewer != nil {
+			if m.viewer.update(msg.String(), m.viewWidth(), m.viewHeight()) {
+				m.viewer = nil
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
@@ -89,6 +99,13 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.selected = m.sessions[m.cursor]
 			return m, tea.Quit
+		case "i":
+			viewer, err := newJSONLViewer(m.sessions[m.cursor].id)
+			if err != nil {
+				m.statusMsg = "error: " + err.Error()
+			} else {
+				m.viewer, m.statusMsg = viewer, ""
+			}
 		case "v":
 			url, err := serveAndOpenTranscript(m.sessions[m.cursor].id)
 			m.preview.servingURL = url
@@ -155,13 +172,29 @@ func (m *pickerModel) resetPreview(err error) {
 	}
 }
 
-func (m pickerModel) View() tea.View {
-	width, height := m.width, m.height
-	if width <= 0 {
-		width = 80
+// viewWidth and viewHeight are the terminal size the views are drawn at,
+// falling back to a sane default before the first WindowSizeMsg arrives.
+func (m pickerModel) viewWidth() int {
+	if m.width <= 0 {
+		return 80
 	}
-	if height <= 0 {
-		height = 24
+	return m.width
+}
+
+func (m pickerModel) viewHeight() int {
+	if m.height <= 0 {
+		return 24
+	}
+	return m.height
+}
+
+func (m pickerModel) View() tea.View {
+	width, height := m.viewWidth(), m.viewHeight()
+
+	if m.viewer != nil {
+		v := tea.NewView(m.viewer.view(width, height))
+		v.AltScreen = true
+		return v
 	}
 
 	previewHeight := height / 3
