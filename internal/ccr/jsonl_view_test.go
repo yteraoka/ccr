@@ -63,7 +63,7 @@ func TestJSONLViewerIndexListsLinesAndMovesTheCursor(t *testing.T) {
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
 
 	got := ansi.Strip(v.view(100, 10))
-	for _, want := range []string{"LINE", "TYPE", "CONTENT", "user", "assistant", "i/enter: show JSON"} {
+	for _, want := range []string{"LINE", "TYPE", "CONTENT", "user", "assistant", "i/enter: show JSON", "space/b: page"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("index view missing %q:\n%s", want, got)
 		}
@@ -386,16 +386,49 @@ func TestModalPagingKeys(t *testing.T) {
 	}
 }
 
+// The index pages with the same keys as the modal, so moving between the
+// two screens does not change what space does.
+//
 // The key name for the space bar is "space"; " " never arrives, so a
 // binding written that way would silently do nothing.
-func TestSpaceOpensTheModalFromTheIndex(t *testing.T) {
-	lines, err := loadJSONLLines(writeJSONLFixture(t, `{"type":"user","message":{"content":"hi"}}`))
+func TestIndexPagingKeys(t *testing.T) {
+	var raw []string
+	for i := 0; i < 60; i++ {
+		raw = append(raw, `{"type":"user","message":{"content":"hi"}}`)
+	}
+	lines, err := loadJSONLLines(writeJSONLFixture(t, raw...))
 	if err != nil {
 		t.Fatal(err)
 	}
+	const width, height = 80, 14
+	page := height - 2
+
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
-	v.update("space", 80, 20)
-	if v.detail == nil {
-		t.Error("space should open the JSON from the index")
+	v.update("space", width, height)
+	if v.cursor != page {
+		t.Errorf("cursor after space = %d, want a page down (%d)", v.cursor, page)
+	}
+	// and it pages rather than opening the JSON, which i and enter do
+	if v.detail != nil {
+		t.Error("space should page the list, not open the modal")
+	}
+
+	v.update("b", width, height)
+	if v.cursor != 0 {
+		t.Errorf("cursor after b = %d, want back at the top", v.cursor)
+	}
+	v.update("space", width, height)
+	v.update("backspace", width, height)
+	if v.cursor != 0 {
+		t.Errorf("cursor after backspace = %d, want back at the top", v.cursor)
+	}
+
+	// they agree with the pgup/pgdown keys they stand in for
+	v.update("pgdown", width, height)
+	afterPgDown := v.cursor
+	v.update("pgup", width, height)
+	v.update("space", width, height)
+	if v.cursor != afterPgDown {
+		t.Errorf("space moved to %d but pgdown moved to %d", v.cursor, afterPgDown)
 	}
 }
