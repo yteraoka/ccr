@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.0.1](https://github.com/yteraoka/ccr/compare/v1.0.0...v1.0.1) - 2026-09-05
+
+- Fold runs of tool calls into collapsed groups by @yteraoka in https://github.com/yteraoka/ccr/pull/63
+- Give the transcript Claude's mark and a friendlier Human icon by @yteraoka in https://github.com/yteraoka/ccr/pull/65
+- Restyle the transcript page by @yteraoka in https://github.com/yteraoka/ccr/pull/66
+- Stop inline code borrowing the token chip's colour by @yteraoka in https://github.com/yteraoka/ccr/pull/67
+- Show the original JSON behind an event, fetched on demand by @yteraoka in https://github.com/yteraoka/ccr/pull/68
+- Add a jsonl viewer to the picker by @yteraoka in https://github.com/yteraoka/ccr/pull/69
+- Give the session list the same navigation as the jsonl viewer by @yteraoka in https://github.com/yteraoka/ccr/pull/70
+- Filter the session list and the jsonl index with / by @yteraoka in https://github.com/yteraoka/ccr/pull/71
+- Show a session's cost-state on the transcript page by @yteraoka in https://github.com/yteraoka/ccr/pull/72
+
 ## [v0.0.7](https://github.com/yteraoka/ccr/compare/v0.0.6...v0.0.7) - 2026-09-04
 
 - Update dependency go to v1.27.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/55
