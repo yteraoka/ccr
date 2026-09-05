@@ -184,20 +184,20 @@ func (m *pickerModel) loadPreview() {
 		m.resetPreview(err)
 		return
 	}
-	cwd, aiTitle, prompts, startTime, endTime, usage, err := parseSessionInfo(path)
+	parsed, err := parseSessionInfo(path)
 	if err != nil {
 		m.resetPreview(err)
 		return
 	}
 	m.preview = previewData{
 		sessionID:  id,
-		cwd:        cwd,
+		cwd:        parsed.cwd,
 		size:       info.Size(),
-		aiTitle:    aiTitle,
-		prompts:    prompts,
-		start:      startTime,
-		end:        endTime,
-		tokens:     usage,
+		aiTitle:    parsed.aiTitle,
+		prompts:    parsed.prompts,
+		start:      parsed.startTime,
+		end:        parsed.endTime,
+		tokens:     parsed.usage,
 		servingURL: m.preview.servingURL,
 	}
 }

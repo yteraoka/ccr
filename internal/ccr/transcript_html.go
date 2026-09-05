@@ -849,6 +849,53 @@ func writeFilterGroup(b *strings.Builder, title string, rows []filterRow) {
 	b.WriteString("</div>\n")
 }
 
+// renderCostState renders the session's cost-state tally: a line of totals
+// and a table of what each model was asked to do. It is collapsed, since
+// it describes the session rather than the conversation, and renders
+// nothing at all for a file that records no cost.
+func renderCostState(c *costState) string {
+	if c == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(`<details class="cost"><summary>💰 ` + html.EscapeString(formatUSD(c.TotalCostUSD)) + ` — cost and timing</summary><div class="cost-body">`)
+
+	b.WriteString(`<div class="cost-totals">`)
+	for _, item := range []struct{ label, value string }{
+		{"Total", formatUSD(c.TotalCostUSD)},
+		{"Session", humanDuration(c.TotalDuration)},
+		{"API", humanDuration(c.TotalAPIDuration)},
+		{"Tools", humanDuration(c.TotalToolDuration)},
+		{"Lines", fmt.Sprintf("+%d / -%d", c.TotalLinesAdded, c.TotalLinesRemoved)},
+	} {
+		b.WriteString(`<div><strong>` + html.EscapeString(item.label) + `:</strong> ` + html.EscapeString(item.value) + `</div>`)
+	}
+	b.WriteString(`</div>`)
+
+	if len(c.ModelUsage) > 0 {
+		b.WriteString(`<table class="cost-models"><thead><tr>` +
+			`<th>Model</th><th>In</th><th>Out</th><th>Cache write</th><th>Cache read</th><th>Cost</th>` +
+			`</tr></thead><tbody>`)
+		for _, name := range c.modelNames() {
+			u := c.ModelUsage[name]
+			fmt.Fprintf(&b, `<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
+				html.EscapeString(name),
+				humanCount(u.InputTokens), humanCount(u.OutputTokens),
+				humanCount(u.CacheCreationInputTokens), humanCount(u.CacheReadInputTokens),
+				html.EscapeString(formatUSD(u.CostUSD)))
+		}
+		b.WriteString(`</tbody></table>`)
+	}
+
+	if c.HasUnknownModelCost {
+		b.WriteString(`<p class="cost-note">A model with no known price was used, so the total is a lower bound.</p>`)
+	}
+
+	b.WriteString(`</div></details>`)
+	return b.String()
+}
+
 // sessionHeaderInfo carries the page-header metadata for
 // renderTranscriptHTML.
 type sessionHeaderInfo struct {
@@ -857,6 +904,8 @@ type sessionHeaderInfo struct {
 	aiTitle   string
 	startTime time.Time
 	endTime   time.Time
+	// cost is the session's cost-state tally, when the file records one.
+	cost *costState
 	// subtitle names what this page is when it isn't the session itself
 	// (a sub agent's own transcript), and backLink points home from it.
 	subtitle string
@@ -882,7 +931,7 @@ func buildSessionHTML(id, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cwd, aiTitle, _, startTime, endTime, _, err := parseSessionInfo(path)
+	parsed, err := parseSessionInfo(path)
 	if err != nil {
 		return "", err
 	}
@@ -890,10 +939,11 @@ func buildSessionHTML(id, path string) (string, error) {
 	agents := findSubagents(path)
 	meta := sessionHeaderInfo{
 		sessionID: id,
-		cwd:       cwd,
-		aiTitle:   aiTitle,
-		startTime: startTime,
-		endTime:   endTime,
+		cwd:       parsed.cwd,
+		aiTitle:   parsed.aiTitle,
+		startTime: parsed.startTime,
+		endTime:   parsed.endTime,
+		cost:      parsed.cost,
 		agents:    agents,
 		links: newSubagentLinker(agents, func(a subagentInfo) string {
 			return subagentURL(id, a.id)
@@ -910,7 +960,7 @@ func buildSubagentHTML(sessionID string, agent subagentInfo) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cwd, _, _, startTime, endTime, _, err := parseSessionInfo(agent.path)
+	parsed, err := parseSessionInfo(agent.path)
 	if err != nil {
 		return "", err
 	}
@@ -921,10 +971,11 @@ func buildSubagentHTML(sessionID string, agent subagentInfo) (string, error) {
 	}
 	meta := sessionHeaderInfo{
 		sessionID: sessionID,
-		cwd:       cwd,
+		cwd:       parsed.cwd,
 		aiTitle:   agent.label(),
-		startTime: startTime,
-		endTime:   endTime,
+		startTime: parsed.startTime,
+		endTime:   parsed.endTime,
+		cost:      parsed.cost,
 		subtitle:  subtitle,
 		backLink:  sessionURL(sessionID),
 	}
@@ -960,7 +1011,11 @@ func renderTranscriptHTML(meta sessionHeaderInfo, entries []transcriptEntry) str
 	if !meta.endTime.IsZero() {
 		header.WriteString("<div><strong>Ended:</strong> " + html.EscapeString(meta.endTime.Local().Format("2006-01-02 15:04:05")) + "</div>\n")
 	}
+	if meta.cost != nil {
+		header.WriteString("<div><strong>Cost:</strong> " + html.EscapeString(formatUSD(meta.cost.TotalCostUSD)) + "</div>\n")
+	}
 	header.WriteString("</div>\n")
+	header.WriteString(renderCostState(meta.cost))
 
 	kinds, tools := collectFilterRows(entries)
 
@@ -1232,6 +1287,27 @@ h1 {
 }
 .meta strong { color: var(--ink); font-weight: 800; }
 .subtitle { font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; font-weight: 700; }
+.cost {
+  margin: -1.5rem 0 2rem;
+  font-size: 0.85rem;
+  background: #ffffff;
+  border-color: rgba(42, 36, 56, 0.14);
+}
+.cost-body { padding: 0.2rem 0.9rem 0.7rem; overflow-x: auto; }
+.cost-totals { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; margin: 0.5rem 0; }
+.cost-totals strong { font-weight: 800; }
+.cost-models { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.cost-models th, .cost-models td {
+  padding: 0.15rem 0.7rem 0.15rem 0;
+  text-align: right;
+  white-space: nowrap;
+}
+.cost-models th:first-child, .cost-models td:first-child {
+  text-align: left;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+}
+.cost-models th { color: var(--muted); font-weight: 700; border-bottom: 1px solid rgba(42, 36, 56, 0.15); }
+.cost-note { color: var(--muted); margin: 0.5rem 0 0; }
 .back-link {
   display: inline-block;
   font-size: 0.8rem;

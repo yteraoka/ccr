@@ -153,6 +153,10 @@ and a message left with nothing visible is hidden along with its contents.
 Assistant turns that report token usage show it in the card header next to
 the timestamp, broken down the same way as in the picker.
 
+If the file records a `cost-state` line, the header shows what the session
+cost, with a collapsed breakdown of the time it spent and what each model
+was asked to do. Sessions written without one show no cost at all.
+
 Every event carries a `{ }` button that shows the original jsonl line
 behind it. The JSON is not embedded in the page — that would roughly double
 a transcript already measured in megabytes — so the page holds only the

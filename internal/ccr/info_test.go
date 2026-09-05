@@ -19,10 +19,11 @@ func TestParseSessionInfoTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, start, end, _, err := parseSessionInfo(path)
+	got, err := parseSessionInfo(path)
 	if err != nil {
 		t.Fatalf("parseSessionInfo: %v", err)
 	}
+	start, end := got.startTime, got.endTime
 
 	wantStart := time.Date(2026, 7, 24, 13, 32, 51, 34*int(time.Millisecond), time.UTC)
 	wantEnd := time.Date(2026, 7, 24, 13, 54, 53, 368*int(time.Millisecond), time.UTC)
@@ -50,10 +51,11 @@ func TestParseSessionInfoAiTitleAndPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cwd, aiTitle, prompts, _, _, _, err := parseSessionInfo(path)
+	got, err := parseSessionInfo(path)
 	if err != nil {
 		t.Fatalf("parseSessionInfo: %v", err)
 	}
+	cwd, aiTitle, prompts := got.cwd, got.aiTitle, got.prompts
 	if cwd != "/tmp/proj" {
 		t.Errorf("cwd = %q, want /tmp/proj", cwd)
 	}
@@ -84,10 +86,11 @@ func TestParseSessionInfoTokenUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, _, _, usage, err := parseSessionInfo(path)
+	parsed, err := parseSessionInfo(path)
 	if err != nil {
 		t.Fatalf("parseSessionInfo: %v", err)
 	}
+	usage := parsed.usage
 
 	// msg_1 counted once, msg_2 added, and the non-assistant line ignored.
 	want := tokenUsage{input: 11, output: 22, cacheCreation: 33, cacheRead: 44}
@@ -146,10 +149,11 @@ func TestParseSessionInfoNoTimestamps(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, start, end, _, err := parseSessionInfo(path)
+	got, err := parseSessionInfo(path)
 	if err != nil {
 		t.Fatalf("parseSessionInfo: %v", err)
 	}
+	start, end := got.startTime, got.endTime
 
 	if !start.IsZero() {
 		t.Errorf("start = %v, want zero value", start)
