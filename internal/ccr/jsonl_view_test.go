@@ -63,21 +63,21 @@ func TestJSONLViewerIndexListsLinesAndMovesTheCursor(t *testing.T) {
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
 
 	got := ansi.Strip(v.view(100, 10))
-	for _, want := range []string{"LINE", "TYPE", "CONTENT", "user", "assistant", "i/enter: show JSON", "space/b: page", "j/k/n/p: move"} {
+	for _, want := range []string{"LINE", "TYPE", "CONTENT", "user", "assistant", "i/enter: JSON", "space/b: page", "j/k/n/p: move", "/: filter"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("index view missing %q:\n%s", want, got)
 		}
 	}
 
-	if v.update("down", 100, 10); v.cursor != 1 {
+	if v.update("down", "", 100, 10); v.cursor != 1 {
 		t.Errorf("cursor after down = %d, want 1", v.cursor)
 	}
 	// and it stops at the ends rather than running off them
-	v.update("down", 100, 10)
+	v.update("down", "", 100, 10)
 	if v.cursor != 1 {
 		t.Errorf("cursor past the last line = %d, want it clamped to 1", v.cursor)
 	}
-	v.update("home", 100, 10)
+	v.update("home", "", 100, 10)
 	if v.cursor != 0 {
 		t.Errorf("cursor after home = %d, want 0", v.cursor)
 	}
@@ -91,7 +91,7 @@ func TestJSONLViewerOpensTheLinePrettyPrinted(t *testing.T) {
 	}
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
 
-	v.update("i", 100, 20)
+	v.update("i", "", 100, 20)
 	if v.detail == nil {
 		t.Fatal("i did not open the line")
 	}
@@ -112,19 +112,19 @@ func TestJSONLViewerOpensTheLinePrettyPrinted(t *testing.T) {
 	}
 
 	// esc closes the modal, and only a second one leaves the viewer
-	if closed := v.update("esc", 100, 20); closed {
+	if closed := v.update("esc", "", 100, 20); closed {
 		t.Error("esc should close the modal, not the viewer")
 	}
 	if v.detail != nil {
 		t.Error("esc did not close the modal")
 	}
-	if closed := v.update("esc", 100, 20); !closed {
+	if closed := v.update("esc", "", 100, 20); !closed {
 		t.Error("esc in the index should close the viewer")
 	}
 
 	// and the key that opened it closes it again
-	v.update("i", 100, 20)
-	v.update("i", 100, 20)
+	v.update("i", "", 100, 20)
+	v.update("i", "", 100, 20)
 	if v.detail != nil {
 		t.Error("i should toggle the modal shut again")
 	}
@@ -137,7 +137,7 @@ func TestJSONLViewerShowsUnparseableLineVerbatim(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
-	v.update("i", 100, 20)
+	v.update("i", "", 100, 20)
 
 	got := ansi.Strip(v.view(100, 20))
 	if !strings.Contains(got, "{ broken") {
@@ -158,8 +158,8 @@ func TestJSONLViewerEmptyFile(t *testing.T) {
 		t.Errorf("empty file view = %q, want it to say so", got)
 	}
 	// and it must not panic on the keys that move a cursor there is none of
-	v.update("down", 60, 8)
-	v.update("i", 60, 8)
+	v.update("down", "", 60, 8)
+	v.update("i", "", 60, 8)
 	if v.detail != nil {
 		t.Error("there is no line to open in an empty file")
 	}
@@ -218,20 +218,20 @@ func TestModalScrollsWithinItsOwnHeight(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
-	v.update("i", 60, 12)
+	v.update("i", "", 60, 12)
 	if len(v.detail) == 0 {
 		t.Fatal("the modal has no content")
 	}
 
-	v.update("end", 60, 12)
+	v.update("end", "", 60, 12)
 	if v.detailTop != maxTop(len(v.detail), modalContentHeight(12)) {
 		t.Errorf("detailTop after end = %d, want the last page of the modal", v.detailTop)
 	}
-	v.update("down", 60, 12)
+	v.update("down", "", 60, 12)
 	if v.detailTop != maxTop(len(v.detail), modalContentHeight(12)) {
 		t.Error("scrolling past the end should stop there")
 	}
-	v.update("home", 60, 12)
+	v.update("home", "", 60, 12)
 	if v.detailTop != 0 {
 		t.Errorf("detailTop after home = %d, want 0", v.detailTop)
 	}
@@ -247,7 +247,7 @@ func TestJSONLViewerEnterOpensButNeverQuits(t *testing.T) {
 	}
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
 
-	if closed := v.update("enter", 100, 20); closed {
+	if closed := v.update("enter", "", 100, 20); closed {
 		t.Error("enter should never close the viewer")
 	}
 	if v.detail == nil {
@@ -255,7 +255,7 @@ func TestJSONLViewerEnterOpensButNeverQuits(t *testing.T) {
 	}
 
 	// and it does not put it away again: closing is q/esc/i
-	if closed := v.update("enter", 100, 20); closed {
+	if closed := v.update("enter", "", 100, 20); closed {
 		t.Error("enter should never close the viewer")
 	}
 	if v.detail == nil {
@@ -276,14 +276,14 @@ func TestModalStepsThroughLinesWithNAndP(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
-	v.update("i", 100, 20)
+	v.update("i", "", 100, 20)
 
 	shows := func(want string) bool { return strings.Contains(ansi.Strip(v.view(100, 20)), want) }
 	if !shows(`"content": "one"`) {
 		t.Fatalf("the modal did not open on the first line:\n%s", ansi.Strip(v.view(100, 20)))
 	}
 
-	v.update("n", 100, 20)
+	v.update("n", "", 100, 20)
 	if v.cursor != 1 || !shows(`"content": "two"`) {
 		t.Errorf("n did not move to the next line (cursor=%d)", v.cursor)
 	}
@@ -294,18 +294,18 @@ func TestModalStepsThroughLinesWithNAndP(t *testing.T) {
 		t.Error("the modal title should follow the line it is showing")
 	}
 
-	v.update("p", 100, 20)
+	v.update("p", "", 100, 20)
 	if v.cursor != 0 || !shows(`"content": "one"`) {
 		t.Errorf("p did not move back (cursor=%d)", v.cursor)
 	}
 
 	// and they stop at the ends rather than wrapping or panicking
-	v.update("p", 100, 20)
+	v.update("p", "", 100, 20)
 	if v.cursor != 0 {
 		t.Errorf("p at the first line = %d, want it to stay", v.cursor)
 	}
 	for i := 0; i < 5; i++ {
-		v.update("n", 100, 20)
+		v.update("n", "", 100, 20)
 	}
 	if v.cursor != 2 {
 		t.Errorf("n past the last line = %d, want it clamped", v.cursor)
@@ -324,11 +324,11 @@ func TestModalStepKeepsTheListInSync(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
-	v.update("i", 100, 12)
+	v.update("i", "", 100, 12)
 	for i := 0; i < 30; i++ {
-		v.update("n", 100, 12)
+		v.update("n", "", 100, 12)
 	}
-	v.update("esc", 100, 12)
+	v.update("esc", "", 100, 12)
 
 	if v.cursor != 30 {
 		t.Fatalf("cursor = %d, want 30", v.cursor)
@@ -352,22 +352,22 @@ func TestModalPagingKeys(t *testing.T) {
 	page := modalContentHeight(height)
 
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
-	v.update("i", width, height)
+	v.update("i", "", width, height)
 	if len(v.detail) <= page {
 		t.Fatalf("the fixture is not long enough to page: %d rows in a %d-row modal", len(v.detail), page)
 	}
 
 	// space pages down; b and backspace page back up
-	v.update("space", width, height)
+	v.update("space", "", width, height)
 	if v.detailTop != page {
 		t.Errorf("detailTop after space = %d, want %d", v.detailTop, page)
 	}
-	v.update("b", width, height)
+	v.update("b", "", width, height)
 	if v.detailTop != 0 {
 		t.Errorf("detailTop after b = %d, want 0", v.detailTop)
 	}
-	v.update("space", width, height)
-	v.update("backspace", width, height)
+	v.update("space", "", width, height)
+	v.update("backspace", "", width, height)
 	if v.detailTop != 0 {
 		t.Errorf("detailTop after backspace = %d, want 0", v.detailTop)
 	}
@@ -377,10 +377,10 @@ func TestModalPagingKeys(t *testing.T) {
 	}
 
 	// they agree with the pgup/pgdown keys they stand in for
-	v.update("pgdown", width, height)
+	v.update("pgdown", "", width, height)
 	afterPgDown := v.detailTop
-	v.update("pgup", width, height)
-	v.update("space", width, height)
+	v.update("pgup", "", width, height)
+	v.update("space", "", width, height)
 	if v.detailTop != afterPgDown {
 		t.Errorf("space moved to %d but pgdown moved to %d", v.detailTop, afterPgDown)
 	}
@@ -404,7 +404,7 @@ func TestIndexPagingKeys(t *testing.T) {
 	page := height - 2
 
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
-	v.update("space", width, height)
+	v.update("space", "", width, height)
 	if v.cursor != page {
 		t.Errorf("cursor after space = %d, want a page down (%d)", v.cursor, page)
 	}
@@ -413,21 +413,21 @@ func TestIndexPagingKeys(t *testing.T) {
 		t.Error("space should page the list, not open the modal")
 	}
 
-	v.update("b", width, height)
+	v.update("b", "", width, height)
 	if v.cursor != 0 {
 		t.Errorf("cursor after b = %d, want back at the top", v.cursor)
 	}
-	v.update("space", width, height)
-	v.update("backspace", width, height)
+	v.update("space", "", width, height)
+	v.update("backspace", "", width, height)
 	if v.cursor != 0 {
 		t.Errorf("cursor after backspace = %d, want back at the top", v.cursor)
 	}
 
 	// they agree with the pgup/pgdown keys they stand in for
-	v.update("pgdown", width, height)
+	v.update("pgdown", "", width, height)
 	afterPgDown := v.cursor
-	v.update("pgup", width, height)
-	v.update("space", width, height)
+	v.update("pgup", "", width, height)
+	v.update("space", "", width, height)
 	if v.cursor != afterPgDown {
 		t.Errorf("space moved to %d but pgdown moved to %d", v.cursor, afterPgDown)
 	}
@@ -446,12 +446,12 @@ func TestIndexStepsWithNAndP(t *testing.T) {
 	}
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
 
-	v.update("n", 80, 20)
+	v.update("n", "", 80, 20)
 	if v.cursor != 1 {
 		t.Errorf("cursor after n = %d, want 1 (the same as j)", v.cursor)
 	}
-	v.update("n", 80, 20)
-	v.update("p", 80, 20)
+	v.update("n", "", 80, 20)
+	v.update("p", "", 80, 20)
 	if v.cursor != 1 {
 		t.Errorf("cursor after p = %d, want 1 (the same as k)", v.cursor)
 	}
@@ -460,10 +460,10 @@ func TestIndexStepsWithNAndP(t *testing.T) {
 	withNP := &jsonlViewer{sessionID: "s1", lines: lines}
 	withJK := &jsonlViewer{sessionID: "s1", lines: lines}
 	for _, k := range []string{"n", "n", "n", "p"} {
-		withNP.update(k, 80, 20)
+		withNP.update(k, "", 80, 20)
 	}
 	for _, k := range []string{"j", "j", "j", "k"} {
-		withJK.update(k, 80, 20)
+		withJK.update(k, "", 80, 20)
 	}
 	if withNP.cursor != withJK.cursor {
 		t.Errorf("n/p reached %d but j/k reached %d", withNP.cursor, withJK.cursor)
@@ -472,5 +472,120 @@ func TestIndexStepsWithNAndP(t *testing.T) {
 	// and neither opens the JSON: i and enter do that
 	if withNP.detail != nil {
 		t.Error("n/p should move the cursor, not open the modal")
+	}
+}
+
+func TestJSONLIndexFiltersToMatches(t *testing.T) {
+	lines, err := loadJSONLLines(writeJSONLFixture(t,
+		`{"type":"user","message":{"content":"hello"}}`,
+		`{"type":"assistant","message":{"content":"world"}}`,
+		`{"type":"assistant","message":{"content":"needle in here"}}`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := &jsonlViewer{sessionID: "s1", lines: lines}
+
+	v.update("/", "/", 100, 20)
+	for _, r := range "needle" {
+		v.update(string(r), string(r), 100, 20)
+	}
+
+	// only the matching line is left, and the cursor is on it
+	if got := len(v.rows()); got != 1 {
+		t.Errorf("%d rows showing, want just the match", got)
+	}
+	line, ok := v.lineAt(v.cursor)
+	if !ok || line.number != 3 {
+		t.Errorf("cursor is on line %+v, want the third line of the file", line)
+	}
+
+	got := ansi.Strip(v.view(100, 20))
+	if !strings.Contains(got, "needle") {
+		t.Errorf("view = %q, want the matching line", got)
+	}
+	if strings.Contains(got, "world") || strings.Contains(got, "hello") {
+		t.Errorf("view = %q, want the lines that do not match hidden", got)
+	}
+	if !strings.Contains(got, "/needle") || !strings.Contains(got, "1/3") {
+		t.Errorf("view = %q, want the prompt to say how much is showing", got)
+	}
+
+	// enter keeps the list narrowed and hands the keys back
+	v.update("enter", "", 100, 20)
+	if v.search.typing || !v.search.filtering() {
+		t.Error("enter should stop the typing but keep the filter")
+	}
+	if got := len(v.rows()); got != 1 {
+		t.Errorf("%d rows after enter, want the filter still on", got)
+	}
+	// opening the JSON now works on the filtered line
+	v.update("i", "", 100, 20)
+	if v.detail == nil {
+		t.Error("i should open the JSON once the query has been accepted")
+	}
+	v.update("i", "", 100, 20)
+
+	// esc drops the filter rather than leaving the viewer
+	if closed := v.update("esc", "", 100, 20); closed {
+		t.Error("esc should clear the filter first, not close the viewer")
+	}
+	if v.search.filtering() || len(v.rows()) != 3 {
+		t.Errorf("esc left %d rows and filtering=%v, want the whole file back", len(v.rows()), v.search.filtering())
+	}
+	// and a second esc does leave
+	if closed := v.update("esc", "", 100, 20); !closed {
+		t.Error("esc with no filter should close the viewer")
+	}
+}
+
+func TestJSONLIndexSaysWhenNothingMatches(t *testing.T) {
+	lines, err := loadJSONLLines(writeJSONLFixture(t, `{"type":"user","message":{"content":"hi"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := &jsonlViewer{sessionID: "s1", lines: lines}
+	v.update("/", "/", 100, 20)
+	for _, r := range "zzz" {
+		v.update(string(r), string(r), 100, 20)
+	}
+
+	if got := len(v.rows()); got != 0 {
+		t.Fatalf("%d rows showing, want none", got)
+	}
+	got := ansi.Strip(v.view(100, 20))
+	if !strings.Contains(got, "no line matches zzz") {
+		t.Errorf("view = %q, want it to say nothing matched", got)
+	}
+	// and nothing to open, without panicking on the way
+	v.update("i", "", 100, 20)
+	if v.detail != nil {
+		t.Error("there is no line to open when nothing matches")
+	}
+}
+
+func TestJSONLIndexSearchTakesTypedKeysNotCommands(t *testing.T) {
+	lines, err := loadJSONLLines(writeJSONLFixture(t, `{"type":"user","message":{"content":"quiet"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := &jsonlViewer{sessionID: "s1", lines: lines}
+	v.update("/", "/", 100, 20)
+
+	// i, q and n are commands on the list, but text while typing a query
+	for _, r := range "qui" {
+		v.update(string(r), string(r), 100, 20)
+	}
+	if v.detail != nil {
+		t.Error("i should be typed into the query, not open the modal")
+	}
+	if v.search.query != "qui" {
+		t.Errorf("query = %q, want %q", v.search.query, "qui")
+	}
+	if closed := v.update("e", "e", 100, 20); closed {
+		t.Error("typing must not close the viewer")
+	}
+	if got := len(v.rows()); got != 1 {
+		t.Errorf("%d rows showing, want the line matching %q", got, v.search.query)
 	}
 }

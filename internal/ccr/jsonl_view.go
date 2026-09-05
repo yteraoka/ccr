@@ -40,7 +40,41 @@ type jsonlViewer struct {
 	detail     []string
 	detailTop  int
 	detailLine int
+
+	search incrementalSearch
+	// matches are the indices into lines that the filter leaves showing;
+	// the cursor and every key walk these, not the whole file.
+	matches []int
 }
+
+// rows are the lines currently on show: all of them until a filter narrows
+// it.
+func (v *jsonlViewer) rows() []int {
+	if v.matches == nil {
+		v.matches = v.search.filter(len(v.lines), v.searchText)
+	}
+	return v.matches
+}
+
+// lineAt returns the line the cursor is on, and whether there is one.
+func (v *jsonlViewer) lineAt(cursor int) (jsonlLine, bool) {
+	rows := v.rows()
+	if cursor < 0 || cursor >= len(rows) {
+		return jsonlLine{}, false
+	}
+	return v.lines[rows[cursor]], true
+}
+
+// refilter rebuilds the visible rows after the query changed, putting the
+// cursor back at the top: the rows under it are not the ones it was on.
+func (v *jsonlViewer) refilter() {
+	v.matches = v.search.filter(len(v.lines), v.searchText)
+	v.cursor, v.top = 0, 0
+}
+
+// searchText is what "/" matches a line against: the whole raw line, so a
+// query reaches the type, the timestamp and anything in the payload.
+func (v *jsonlViewer) searchText(i int) string { return string(v.lines[i].raw) }
 
 // jsonlProbe is the little that the index needs out of each line. A line
 // that fails to parse is still listed: seeing it is the point of a raw
@@ -92,10 +126,10 @@ func newJSONLViewer(sessionID string) (*jsonlViewer, error) {
 
 // openDetail pretty-prints the line under the cursor, wrapped to width.
 func (v *jsonlViewer) openDetail(width int) {
-	if len(v.lines) == 0 {
+	line, ok := v.lineAt(v.cursor)
+	if !ok {
 		return
 	}
-	line := v.lines[v.cursor]
 
 	text := string(line.raw)
 	var buf bytes.Buffer
@@ -112,7 +146,7 @@ func (v *jsonlViewer) openDetail(width int) {
 
 // update applies a keypress, reporting whether the viewer should close and
 // hand the screen back to the picker.
-func (v *jsonlViewer) update(key string, width, height int) (closed bool) {
+func (v *jsonlViewer) update(key, text string, width, height int) (closed bool) {
 	page := height - 2
 	if v.detail != nil {
 		page = modalContentHeight(height)
@@ -146,9 +180,26 @@ func (v *jsonlViewer) update(key string, width, height int) (closed bool) {
 		return false
 	}
 
+	if changed, handled := v.search.key(key, text); handled {
+		if changed {
+			v.refilter()
+		}
+		return false
+	}
+
 	switch key {
-	case "esc", "q", "ctrl+c":
+	case "esc", "ctrl+c":
+		// esc drops the filter first, and only then leaves the viewer
+		if v.search.filtering() {
+			v.search.clear()
+			v.refilter()
+			return false
+		}
 		return true
+	case "q":
+		return true
+	case "/":
+		v.search.begin()
 	case "i", "enter", "right", "l":
 		v.openDetail(modalContentWidth(width, height))
 	// n and p step a line here too, so they mean the same on both screens
@@ -163,9 +214,9 @@ func (v *jsonlViewer) update(key string, width, height int) (closed bool) {
 	case "home", "g":
 		v.cursor = 0
 	case "end", "G":
-		v.cursor = len(v.lines) - 1
+		v.cursor = len(v.rows()) - 1
 	}
-	v.cursor = clamp(v.cursor, 0, len(v.lines)-1)
+	v.cursor = clamp(v.cursor, 0, len(v.rows())-1)
 	v.top = scrollTo(v.top, v.cursor, height-2)
 	return false
 }
@@ -173,7 +224,7 @@ func (v *jsonlViewer) update(key string, width, height int) (closed bool) {
 // step moves to the line delta away and shows it, so the reader can walk
 // the file without closing and reopening the modal at every line.
 func (v *jsonlViewer) step(delta, width, height int) {
-	next := clamp(v.cursor+delta, 0, len(v.lines)-1)
+	next := clamp(v.cursor+delta, 0, len(v.rows())-1)
 	if next == v.cursor {
 		return
 	}
@@ -220,7 +271,7 @@ func scrollTo(top, cursor, height int) int {
 	return top
 }
 
-const jsonlIndexLegend = "j/k/n/p: move   space/b: page   i/enter: show JSON   q/esc: back"
+const jsonlIndexLegend = "j/k/n/p: move  space/b: page  /: filter  i/enter: JSON  q: back"
 const jsonlDetailLegend = "n/p: next/prev   j/k: scroll   space/b: page   q/esc: close"
 
 // view renders the index, with the opened line floating over it as a modal
@@ -301,33 +352,41 @@ func (v *jsonlViewer) modalBox(width, height int) string {
 func (v *jsonlViewer) indexView(width, height int) string {
 	header := headerRowStyle.Render(truncate(formatJSONLRow("LINE", "TYPE", "TIME", "CONTENT"), width))
 	legend := legendStyle.Render(truncate(jsonlIndexLegend, width))
-
-	rows := height - 2 // header line + legend line
-	if rows < 0 {
-		rows = 0
+	rows := v.rows()
+	if v.search.showsPrompt() {
+		legend = truncate(v.search.prompt(len(rows), len(v.lines)), width)
 	}
-	if len(v.lines) == 0 {
-		body := make([]string, rows)
-		if rows > 0 {
-			body[0] = truncate("(no lines in this session file)", width)
+
+	visible := height - 2 // header line + legend line
+	if visible < 0 {
+		visible = 0
+	}
+	if len(rows) == 0 {
+		body := make([]string, visible)
+		if visible > 0 {
+			message := "(no lines in this session file)"
+			if v.search.filtering() {
+				message = "(no line matches " + v.search.query + ")"
+			}
+			body[0] = truncate(message, width)
 		}
 		return strings.Join(append(append([]string{header}, body...), legend), "\n")
 	}
 
-	end := v.top + rows
-	if end > len(v.lines) {
-		end = len(v.lines)
+	end := v.top + visible
+	if end > len(rows) {
+		end = len(rows)
 	}
-	lines := make([]string, 0, rows)
+	lines := make([]string, 0, visible)
 	for i := v.top; i < end; i++ {
-		l := v.lines[i]
+		l := v.lines[rows[i]]
 		row := truncate(formatJSONLRow(fmt.Sprintf("%d", l.number), l.kind, l.time, string(l.raw)), width)
 		if i == v.cursor {
 			row = selectedRowStyle.Render(row)
 		}
 		lines = append(lines, row)
 	}
-	for len(lines) < rows {
+	for len(lines) < visible {
 		lines = append(lines, "")
 	}
 	return strings.Join(append(append([]string{header}, lines...), legend), "\n")

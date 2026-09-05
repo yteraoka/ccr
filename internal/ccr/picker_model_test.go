@@ -643,3 +643,110 @@ func TestListRowCountMatchesWhatTheListDraws(t *testing.T) {
 		}
 	}
 }
+
+func TestPickerFiltersToMatches(t *testing.T) {
+	sessions := []sessionEntry{
+		{id: "aaa", cwd: "/home/me/alpha"},
+		{id: "bbb", cwd: "/home/me/bravo"},
+		{id: "ccc", cwd: "/home/me/charlie"},
+	}
+	m := pickerModel{sessions: sessions, width: 90, height: 30}
+	typed := func(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Text: string(r)} }
+	press := func(m pickerModel, keys ...tea.KeyPressMsg) pickerModel {
+		for _, k := range keys {
+			updated, _ := m.Update(k)
+			m = updated.(pickerModel)
+		}
+		return m
+	}
+
+	// typing narrows the list to what matches, by cwd as well as by id
+	filtered := press(m, typed('/'), typed('c'), typed('h'))
+	if got := len(filtered.rows()); got != 1 {
+		t.Fatalf("%d sessions showing, want just the charlie one", got)
+	}
+	session, ok := filtered.current()
+	if !ok || session.id != "ccc" {
+		t.Errorf("cursor is on %+v, want the charlie session", session)
+	}
+	view := ansi.Strip(filtered.View().Content)
+	if !strings.Contains(view, "charlie") || strings.Contains(view, "bravo") {
+		t.Errorf("View() = %q, want only the matching session listed", view)
+	}
+	if !strings.Contains(view, "1/3") {
+		t.Errorf("View() = %q, want the prompt to say how much is showing", view)
+	}
+
+	// enter keeps the filter and hands the keys back, so it does not also
+	// resume on the keystroke that ends the typing
+	applied := press(filtered, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if applied.search.typing || !applied.search.filtering() {
+		t.Error("enter should stop the typing but keep the filter")
+	}
+	if applied.selected.id != "" {
+		t.Error("the enter that ends the typing must not also resume a session")
+	}
+	// a second enter resumes, from the filtered list
+	resumed := press(applied, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if resumed.selected.id != "ccc" {
+		t.Errorf("selected = %q, want the session the filter left showing", resumed.selected.id)
+	}
+
+	// esc clears the filter rather than quitting
+	cleared := press(applied, tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cleared.search.filtering() || len(cleared.rows()) != 3 {
+		t.Errorf("esc left %d sessions and filtering=%v, want the whole list back",
+			len(cleared.rows()), cleared.search.filtering())
+	}
+	if cleared.selected.id != "" {
+		t.Error("the esc that clears a filter must not also quit ccr")
+	}
+}
+
+func TestPickerFilterMatchingNothingLeavesNothingToActOn(t *testing.T) {
+	m := pickerModel{sessions: []sessionEntry{{id: "aaa"}}, width: 90, height: 30}
+	typed := func(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Text: string(r)} }
+
+	for _, k := range []tea.KeyPressMsg{typed('/'), typed('z'), typed('z')} {
+		updated, _ := m.Update(k)
+		m = updated.(pickerModel)
+	}
+	if got := len(m.rows()); got != 0 {
+		t.Fatalf("%d sessions showing, want none", got)
+	}
+	if !strings.Contains(ansi.Strip(m.View().Content), "no match") {
+		t.Error("the prompt should say nothing matched")
+	}
+
+	// enter, i and v have nothing to act on, and must not panic or resume
+	m2, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m2.(pickerModel).selected.id != "" {
+		t.Error("enter resumed a session that the filter is not showing")
+	}
+	for _, r := range []rune{'i', 'v'} {
+		if _, _ = m.Update(tea.KeyPressMsg{Code: r}); false {
+			t.Fatal("unreachable")
+		}
+	}
+}
+
+// The keys the list uses for movement have to reach the query while it is
+// being typed, rather than moving the cursor.
+func TestPickerSearchTakesTypedKeysNotCommands(t *testing.T) {
+	sessions := []sessionEntry{{id: "napkin"}, {id: "other"}, {id: "third"}}
+	m := pickerModel{sessions: sessions, width: 90, height: 30}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	m = updated.(pickerModel)
+	for _, r := range "nap" {
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = updated.(pickerModel)
+	}
+
+	if m.search.query != "nap" {
+		t.Errorf("query = %q, want %q: n and p are movement keys but typed text here", m.search.query, "nap")
+	}
+	if got := len(m.rows()); got != 1 {
+		t.Errorf("%d sessions showing, want the one matching %q", got, m.search.query)
+	}
+}
