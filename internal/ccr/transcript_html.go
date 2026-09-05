@@ -1566,6 +1566,10 @@ details > summary::before {
 details[open] > summary::before { transform: rotate(90deg); }
 details[open] > summary { border-bottom: 1px solid #dbe1eb; }
 .tool-group[open] > summary, .tool-run[open] > summary { border-bottom: 1px solid #dbe1eb; }
+/* the <details> already draws the frame, so the <pre> it wraps drops its
+   own; the class list keeps this above ".tool-body pre" / ".msg-body pre"
+   on specificity rather than reaching for !important */
+:is(.msg-body, .tool-body, .thinking-body) details > pre,
 details > pre { margin: 0; border: none; border-radius: 0 0 8px 8px; }
 details.thinking { background: #efe9ff; border-color: #c6b3f0; font-size: 0.85rem; }
 .thinking-body { padding: 0.2rem 0.75rem 0.6rem; color: #4b3f66; }
