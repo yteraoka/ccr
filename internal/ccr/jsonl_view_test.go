@@ -63,7 +63,7 @@ func TestJSONLViewerIndexListsLinesAndMovesTheCursor(t *testing.T) {
 	v := &jsonlViewer{sessionID: "s1", lines: lines}
 
 	got := ansi.Strip(v.view(100, 10))
-	for _, want := range []string{"LINE", "TYPE", "CONTENT", "user", "assistant", "i/enter: show JSON", "space/b: page"} {
+	for _, want := range []string{"LINE", "TYPE", "CONTENT", "user", "assistant", "i/enter: show JSON", "space/b: page", "j/k/n/p: move"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("index view missing %q:\n%s", want, got)
 		}
@@ -430,5 +430,47 @@ func TestIndexPagingKeys(t *testing.T) {
 	v.update("space", width, height)
 	if v.cursor != afterPgDown {
 		t.Errorf("space moved to %d but pgdown moved to %d", v.cursor, afterPgDown)
+	}
+}
+
+// n and p step a line in the modal, so they do the same on the list it
+// opens from rather than meaning something else there.
+func TestIndexStepsWithNAndP(t *testing.T) {
+	var raw []string
+	for i := 0; i < 5; i++ {
+		raw = append(raw, `{"type":"user","message":{"content":"hi"}}`)
+	}
+	lines, err := loadJSONLLines(writeJSONLFixture(t, raw...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := &jsonlViewer{sessionID: "s1", lines: lines}
+
+	v.update("n", 80, 20)
+	if v.cursor != 1 {
+		t.Errorf("cursor after n = %d, want 1 (the same as j)", v.cursor)
+	}
+	v.update("n", 80, 20)
+	v.update("p", 80, 20)
+	if v.cursor != 1 {
+		t.Errorf("cursor after p = %d, want 1 (the same as k)", v.cursor)
+	}
+
+	// they move exactly as far as j and k do
+	withNP := &jsonlViewer{sessionID: "s1", lines: lines}
+	withJK := &jsonlViewer{sessionID: "s1", lines: lines}
+	for _, k := range []string{"n", "n", "n", "p"} {
+		withNP.update(k, 80, 20)
+	}
+	for _, k := range []string{"j", "j", "j", "k"} {
+		withJK.update(k, 80, 20)
+	}
+	if withNP.cursor != withJK.cursor {
+		t.Errorf("n/p reached %d but j/k reached %d", withNP.cursor, withJK.cursor)
+	}
+
+	// and neither opens the JSON: i and enter do that
+	if withNP.detail != nil {
+		t.Error("n/p should move the cursor, not open the modal")
 	}
 }

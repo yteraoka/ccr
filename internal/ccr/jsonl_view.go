@@ -151,9 +151,10 @@ func (v *jsonlViewer) update(key string, width, height int) (closed bool) {
 		return true
 	case "i", "enter", "right", "l":
 		v.openDetail(modalContentWidth(width, height))
-	case "up", "k":
+	// n and p step a line here too, so they mean the same on both screens
+	case "up", "k", "p":
 		v.cursor--
-	case "down", "j":
+	case "down", "j", "n":
 		v.cursor++
 	case "pgup", "ctrl+u", "b", "backspace":
 		v.cursor -= page
@@ -219,7 +220,7 @@ func scrollTo(top, cursor, height int) int {
 	return top
 }
 
-const jsonlIndexLegend = "up/down/j/k: move   space/b: page   i/enter: show JSON   q/esc: back"
+const jsonlIndexLegend = "j/k/n/p: move   space/b: page   i/enter: show JSON   q/esc: back"
 const jsonlDetailLegend = "n/p: next/prev   j/k: scroll   space/b: page   q/esc: close"
 
 // view renders the index, with the opened line floating over it as a modal

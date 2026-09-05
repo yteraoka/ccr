@@ -101,16 +101,16 @@ The terminal splits into two panes:
 Pressing `i` opens the selected session's file in a full-screen viewer,
 without leaving the terminal. It lists one row per line — the line number
 in the file, its `type`, its timestamp, and the start of the raw text —
-`Space` pages the list down, `b` and `Backspace` page it up, and `i` (or
-`Enter`) opens the line under the cursor as pretty-printed JSON, in a
-modal floating over the list. `Enter` only means resume on the
+`n` and `p` step a line, `Space` pages the list down, `b` and `Backspace`
+page it up, and `i` (or `Enter`) opens the line under the cursor as
+pretty-printed JSON, in a modal floating over the list. `Enter` only means resume on the
 picker's own list, so it is free here.
 
 Inside the modal, `n` and `p` step to the next and previous line and show
 it straight away, so you can walk the file without closing and reopening
-it at every line; the list behind follows along. It pages with the same
-keys as the list, so `Space`, `b` and `Backspace` mean the same thing on
-both screens. The list stays visible behind it,
+it at every line; the list behind follows along. Every movement key means
+the same on both screens: `n`/`p` step a line, `Space` pages down, and `b`
+and `Backspace` page up. The list stays visible behind it,
 dimmed, so opening a line never loses your place in the file. The modal
 wraps to its width and scrolls. Lines that are not valid JSON are listed
 too and shown as they are: seeing them is the point of a raw preview.
