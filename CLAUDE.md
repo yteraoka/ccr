@@ -82,6 +82,10 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 します)。type = "user" の行のうち `promptSource` が `system` のもの(sub agent の
 結果報告や monitor イベントなど、harness が注入した通知)は Human ではなく
 `🔔 Notification` として表示します(`isMeta` の行は従来どおり `⚙️ System`)。
+メッセージ本文の Markdown 中に現れる HTML タグ(`<system-reminder>` などの
+harness が注入する疑似 XML タグを含む)はマークアップとして解釈せず、エスケープ
+して書かれたとおりに表示します。ブロックとして現れた場合は改行を保ったまま
+表示し、長い行は折り返します。
 各 card のラベルのアイコンは Human が `🐰`、Claude は Claude のマーク(coral
 `#d97757` の放射状のシンボル)をインライン SVG で描画したものを使います
 (自己完結ページを保つため外部画像は使いません)。コマンドの入力やツールの呼び出し内容はそのまま表示されますが、実行結果
