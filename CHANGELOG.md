@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.0.1](https://github.com/yteraoka/ccr/compare/v2.0.0...v2.0.1) - 2026-09-06
+
+- Drop the border on <pre> inside a collapsed block by @yteraoka in https://github.com/yteraoka/ccr/pull/73
+
 ## [v1.0.1](https://github.com/yteraoka/ccr/compare/v1.0.0...v1.0.1) - 2026-09-05
 
 - Fold runs of tool calls into collapsed groups by @yteraoka in https://github.com/yteraoka/ccr/pull/63
