@@ -16,8 +16,10 @@ import (
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/yuin/goldmark"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
-	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/util"
 )
 
 const chromaStyleName = "github"
@@ -29,14 +31,74 @@ var markdownRenderer = goldmark.New(
 		extension.GFM,
 		highlighting.NewHighlighting(highlighting.WithStyle(chromaStyleName)),
 	),
-	goldmark.WithRendererOptions(goldmarkhtml.WithUnsafe()),
+	// A priority below the default HTML renderer's 1000 takes over the two
+	// raw-HTML node kinds from it.
+	goldmark.WithRendererOptions(
+		renderer.WithNodeRenderers(util.Prioritized(rawHTMLEscaper{}, 100)),
+	),
 )
 
+// rawHTMLEscaper renders the HTML found inside Markdown as literal text
+// rather than as markup. A transcript is a record of what was said, and
+// tags are part of what was said: the pseudo-XML wrappers Claude Code
+// injects into message text (<system-reminder>, <task-id>, ...) and any
+// tag a user or a tool quoted in prose. Handing those to the browser
+// loses them -- an unknown element shows only its children, a <script>
+// or a stray unclosed tag can take the rest of the card with it -- so
+// they are escaped and shown as written instead.
+//
+// This replaces goldmark's own two choices, neither of which shows the
+// text: with WithUnsafe the markup is live, and without it raw HTML is
+// dropped for an "omitted" comment.
+type rawHTMLEscaper struct{}
+
+func (rawHTMLEscaper) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindRawHTML, renderEscapedRawHTML)
+	reg.Register(ast.KindHTMLBlock, renderEscapedHTMLBlock)
+}
+
+// renderEscapedRawHTML writes an inline tag (<b>, </b>, <br/>) as text.
+func renderEscapedRawHTML(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkSkipChildren, nil
+	}
+	n := node.(*ast.RawHTML)
+	for i := 0; i < n.Segments.Len(); i++ {
+		seg := n.Segments.At(i)
+		_, _ = w.WriteString(html.EscapeString(string(seg.Value(source))))
+	}
+	return ast.WalkSkipChildren, nil
+}
+
+// renderEscapedHTMLBlock writes a block of HTML as text. Its lines are
+// kept as they were written -- a <system-reminder> block is a small
+// document of its own, and running it together into one paragraph would
+// be harder to read than the tags are -- so the block preserves newlines
+// and wraps long lines.
+func renderEscapedHTMLBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.HTMLBlock)
+	var raw []byte
+	lines := n.Lines()
+	for i := 0; i < lines.Len(); i++ {
+		line := lines.At(i)
+		raw = append(raw, line.Value(source)...)
+	}
+	if n.HasClosure() {
+		closure := n.ClosureLine
+		raw = append(raw, closure.Value(source)...)
+	}
+	_, _ = w.WriteString(`<div class="raw-html">`)
+	_, _ = w.WriteString(html.EscapeString(strings.TrimRight(string(raw), "\n")))
+	_, _ = w.WriteString("</div>\n")
+	return ast.WalkContinue, nil
+}
+
 // renderMarkdown converts Markdown text (assistant prose, human prompts,
-// thinking blocks) to HTML. Pseudo-XML wrapper tags that Claude Code
-// sometimes injects into user content (e.g. <system-reminder>) pass
-// through as unrecognized elements: browsers still render their text
-// content, they just don't carry any special styling.
+// thinking blocks) to HTML. HTML in the text itself is escaped by
+// rawHTMLEscaper and shown as written.
 func renderMarkdown(text string) string {
 	var buf bytes.Buffer
 	if err := markdownRenderer.Convert([]byte(text), &buf); err != nil {
@@ -1441,6 +1503,14 @@ h1 {
 }
 .msg-body :first-child { margin-top: 0; }
 .msg-body :last-child { margin-bottom: 0; }
+/* A block of HTML the message text contained, shown as written: it keeps
+   the line breaks it was typed with, and long lines wrap rather than
+   pushing the card sideways. */
+.raw-html {
+  margin: 0.75rem 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .msg-body pre {
   padding: 0.75rem 1rem;
   border-radius: 12px;

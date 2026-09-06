@@ -110,6 +110,28 @@ func TestRenderMarkdownBasic(t *testing.T) {
 	}
 }
 
+// Tags in message text are content, not markup: they must reach the page
+// as the characters they were written with.
+func TestRenderMarkdownEscapesInlineHTML(t *testing.T) {
+	got := renderMarkdown("an inline <b>tag</b> and <img src=x onerror=alert(1)>")
+	want := "an inline &lt;b&gt;tag&lt;/b&gt; and &lt;img src=x onerror=alert(1)&gt;"
+	if !strings.Contains(got, want) {
+		t.Errorf("renderMarkdown = %q, want it to contain %q", got, want)
+	}
+}
+
+func TestRenderMarkdownEscapesHTMLBlock(t *testing.T) {
+	got := renderMarkdown("<system-reminder>\nline one\n</system-reminder>")
+	want := `<div class="raw-html">&lt;system-reminder&gt;` + "\nline one\n" + `&lt;/system-reminder&gt;</div>`
+	if !strings.Contains(got, want) {
+		t.Errorf("renderMarkdown = %q, want it to contain %q", got, want)
+	}
+	// goldmark's own no-unsafe rendering drops the block for this comment.
+	if strings.Contains(got, "omitted") {
+		t.Errorf("renderMarkdown = %q, want the raw HTML kept, not omitted", got)
+	}
+}
+
 func TestPrettyJSON(t *testing.T) {
 	got := prettyJSON([]byte(`{"a":1}`))
 	want := "{\n  \"a\": 1\n}"
