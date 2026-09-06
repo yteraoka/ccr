@@ -1488,8 +1488,15 @@ h1 {
   background: #f7fbf9;
   border: 1px solid #d3e3db;
 }
+/* The aside (tokens, timestamp, { }) has a width of its own, the title has
+   not. Laying the summary out right-to-left -- aside first in flex order,
+   so it keeps the right edge -- lets the title drop to a full-width second
+   row once what is left beside the aside falls under the basis below,
+   instead of being squeezed into a column a few characters wide. */
 .tool-run > summary {
   display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.75rem;
@@ -1497,8 +1504,14 @@ h1 {
   color: var(--ink);
   cursor: pointer;
 }
-.tool-run-title { flex: 1; min-width: 0; overflow-wrap: anywhere; font-family: "SFMono-Regular", Consolas, Menlo, monospace; }
-.tool-run > summary .msg-aside { flex: none; }
+.tool-run-title {
+  order: 1;
+  flex: 1 1 22ch;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+}
+.tool-run > summary .msg-aside { order: 0; flex: 0 1 auto; }
 .tool-run-body { padding: 0 0.75rem 0.5rem; overflow-x: auto; }
 .tool-run-body > .tool-card:first-child { margin-top: 0; }
 /* Inside a run, the card is just a wrapper holding the command and its
