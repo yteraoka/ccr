@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.1.1](https://github.com/yteraoka/ccr/compare/v2.1.0...v2.1.1) - 2026-09-06
+
+- Show HTML in message text as text by @yteraoka in https://github.com/yteraoka/ccr/pull/76
+
 ## [v2.0.1](https://github.com/yteraoka/ccr/compare/v2.0.0...v2.0.1) - 2026-09-06
 
 - Drop the border on <pre> inside a collapsed block by @yteraoka in https://github.com/yteraoka/ccr/pull/73
