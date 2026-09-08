@@ -1,5 +1,10 @@
 # Changelog
 
+## [v2.2.1](https://github.com/yteraoka/ccr/compare/v2.2.0...v2.2.1) - 2026-09-08
+
+- Lighten the transcript page palette by @yteraoka in https://github.com/yteraoka/ccr/pull/78
+- Show the transcript URL where there is no browser to open by @yteraoka in https://github.com/yteraoka/ccr/pull/80
+
 ## [v2.1.1](https://github.com/yteraoka/ccr/compare/v2.1.0...v2.1.1) - 2026-09-06
 
 - Show HTML in message text as text by @yteraoka in https://github.com/yteraoka/ccr/pull/76
