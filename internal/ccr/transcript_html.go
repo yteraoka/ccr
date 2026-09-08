@@ -1230,7 +1230,7 @@ const pageCSS = `
 :root {
   color-scheme: light;
   --ink: #2a2438;
-  --paper: #fff6ea;
+  --paper: #fffaf3;
   --line: #2a2438;
   /* dark enough for the 0.7rem chips and labels it is used on: 6.5:1 on
      the page, 5.5:1 on the palest card */
@@ -1310,7 +1310,7 @@ body {
   cursor: pointer;
 }
 .filter:hover { background: #fff2d9; }
-.filters input[type=checkbox] { accent-color: #ff6b4a; width: 1rem; height: 1rem; }
+.filters input[type=checkbox] { accent-color: #ffa08c; width: 1rem; height: 1rem; }
 .filter-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .filter-count {
   color: var(--ink);
@@ -1422,8 +1422,8 @@ h1 {
    talking. They stay pale: the tool cards, code blocks and <details> inside
    a message are neutral greys that have to keep reading as neutral on top
    of any of these. */
-.message-human { border-color: #aecbfb; background: #d8e6ff; }
-.message-assistant { border-color: #dcbcf0; background: #f2ddfa; }
+.message-human { border-color: #c9dcfc; background: #eaf1ff; }
+.message-assistant { border-color: #e8d3f6; background: #faeefd; }
 /* sub agent reports and monitor events: not the human, but real content
    worth reading, so kept at full size unlike .message-system */
 .message-notification { border-color: #ecd196; background: #fcecc4; }
@@ -1486,7 +1486,7 @@ h1 {
   line-height: 1.5;
 }
 .raw-json:hover { background: #ffffff; color: var(--ink); }
-.raw-json.is-on { background: var(--ink); color: #fff6ea; border-color: var(--ink); }
+.raw-json.is-on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .raw-json-panel {
   margin: 0.6rem 0 0;
   padding: 0.7rem 0.9rem;
