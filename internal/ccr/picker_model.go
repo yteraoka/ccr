@@ -62,6 +62,11 @@ type pickerModel struct {
 
 	statusMsg string
 
+	// noBrowser keeps v from shelling out to a browser, showing the
+	// transcript URL in the status line instead. Its zero value is the
+	// normal behavior, so a picker built without it still opens a browser.
+	noBrowser bool
+
 	selected sessionEntry
 }
 
@@ -143,12 +148,19 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			url, err := serveAndOpenTranscript(session.id)
+			url, opened, err := serveAndOpenTranscript(session.id, m.noBrowser)
 			m.preview.servingURL = url
-			if err != nil {
+			switch {
+			case err != nil:
 				m.statusMsg = "error: " + err.Error()
-			} else {
+			case opened:
 				m.statusMsg = ""
+			default:
+				// No browser was opened, either because -n asked for that
+				// or because this machine has no opener. The URL is then
+				// the whole point of pressing v, so put it where it can be
+				// read and copied.
+				m.statusMsg = "serving at " + url
 			}
 		}
 	}

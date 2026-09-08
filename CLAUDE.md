@@ -79,7 +79,12 @@ exec で `claude --resume <session_id>` を実行します。移動先の cwd �
 見やすく区別された自己完結 HTML(light 基調の配色、Markdown レンダリング、コマンド
 実行結果や diff の syntax highlight 付き)として表示するページを `$BROWSER` で
 開きます(`$BROWSER` が未設定の場合、macOS では `open` コマンドにフォールバック
-します)。type = "user" の行のうち `promptSource` が `system` のもの(sub agent の
+します)。ブラウザを開く手段が無い環境(`$BROWSER` 未設定でプラットフォームの
+フォールバックも無い場合)では、ブラウザを開けなかったことをエラーにはせず、
+サーバーだけを起動して一覧の下のステータス行に `serving at <url>` と URL を
+表示します。`-n`(`-no-browser`)オプション、または環境変数 `CCR_NO_BROWSER`
+(`0` / `false` / `no` / `off` 以外の値)を指定した場合は、ブラウザを開ける環境
+でも同様に開かず URL の表示だけを行います。type = "user" の行のうち `promptSource` が `system` のもの(sub agent の
 結果報告や monitor イベントなど、harness が注入した通知)は Human ではなく
 `🔔 Notification` として表示します(`isMeta` の行は従来どおり `⚙️ System`)。
 メッセージ本文の Markdown 中に現れる HTML タグ(`<system-reminder>` などの
@@ -158,6 +163,12 @@ HTTP サーバーが、リクエストパスの session id (`/<session_id>`)ご�
   のみを対象にします。`<encoded_cwd>` はカレントディレクトリのうち
   `a-zA-Z0-9` 以外の文字をすべて `-` に置換したものです。
 - `ccr -g`: `projects` 配下の全ディレクトリを対象に全セッションをリストアップします。
+
+## コマンドラインオプション
+
+- `-g`: 上記のとおり全プロジェクトを対象にします。
+- `-n` / `-no-browser`: `v` でブラウザを開かず URL の表示だけを行います
+  (環境変数 `CCR_NO_BROWSER` でも同じ設定ができます)。
 
 ## 実行中セッションの検出
 
