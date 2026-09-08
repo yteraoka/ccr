@@ -1,6 +1,7 @@
 package ccr
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -226,6 +227,12 @@ var fallbackOpenerArgv = func() []string {
 	return fallbackOpenerArgvFor(runtime.GOOS)
 }
 
+// errNoBrowserOpener is returned by openInBrowser when this machine has
+// no way to open a URL at all — a headless server, typically. Callers
+// tell it apart from a real failure so they can fall back to showing the
+// URL instead of reporting an error.
+var errNoBrowserOpener = errors.New("no way to open a browser: $BROWSER is not set and this platform has no default opener")
+
 // openInBrowser opens url using the $BROWSER command, following the
 // common convention: if any whitespace-separated token in $BROWSER
 // contains "%s", url is substituted there; otherwise url is appended as
@@ -240,7 +247,7 @@ func openInBrowser(url string) error {
 		argv = fallbackOpenerArgv()
 	}
 	if len(argv) == 0 {
-		return fmt.Errorf("BROWSER environment variable is not set and no fallback browser opener is available for this platform")
+		return errNoBrowserOpener
 	}
 
 	substituted := false

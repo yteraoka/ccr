@@ -1,12 +1,14 @@
 package ccr
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,8 +17,13 @@ import (
 // PrintUsage prints command-line usage help to stderr.
 func PrintUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  ccr [-g]            interactive session picker (current project, or -g for every project)
-  ccr -v               print version and exit`)
+  ccr [-g] [-n]        interactive session picker (current project, or -g for every project)
+  ccr -v               print version and exit
+
+options:
+  -g                   list sessions from every project, not just the current directory
+  -n, -no-browser      on v, print the transcript URL instead of opening a browser
+                       (for machines with no browser; also settable with CCR_NO_BROWSER=1)`)
 }
 
 // RunPicker implements the default ccr action: an interactive picker that
@@ -27,6 +34,8 @@ func PrintUsage() {
 func RunPicker(args []string) error {
 	fs := flag.NewFlagSet("ccr", flag.ExitOnError)
 	global := fs.Bool("g", false, "list sessions from every project, not just the current directory")
+	noBrowser := fs.Bool("no-browser", envIsTrue(os.Getenv("CCR_NO_BROWSER")), "on v, show the transcript URL instead of opening a browser")
+	noBrowserShort := fs.Bool("n", false, "shorthand for -no-browser")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -48,7 +57,9 @@ func RunPicker(args []string) error {
 		return entries[i].timestamp.After(entries[j].timestamp)
 	})
 
-	p := tea.NewProgram(newPickerModel(entries))
+	model := newPickerModel(entries)
+	model.noBrowser = *noBrowser || *noBrowserShort
+	p := tea.NewProgram(model)
 	res, err := p.Run()
 	if err != nil {
 		return err
@@ -109,17 +120,41 @@ func resumeSession(entry sessionEntry) error {
 	return syscall.Exec(argv0, args, os.Environ())
 }
 
+// envIsTrue reports whether an environment variable's value asks for a
+// boolean setting to be turned on. Anything set but obviously negative
+// ("0", "false", "no", "off") counts as off, so CCR_NO_BROWSER=0 can turn
+// the setting back off for one shell.
+func envIsTrue(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
 // serveAndOpenTranscript makes sessionID's jsonl viewable as a
-// self-contained HTML transcript on the shared local HTTP server and
-// opens it via $BROWSER. It returns the URL (valid even if opening the
-// browser failed) and any error encountered.
-func serveAndOpenTranscript(sessionID string) (string, error) {
+// self-contained HTML transcript on the shared local HTTP server, and
+// opens it via $BROWSER unless noBrowser is set or this machine has no
+// opener at all. It returns the URL (valid even if the browser was not
+// opened), whether a browser was actually opened, and any error.
+//
+// A machine with no opener is not an error: on a server there is no
+// browser to open and the URL itself is the useful outcome, so the caller
+// shows it instead of reporting a failure.
+func serveAndOpenTranscript(sessionID string, noBrowser bool) (string, bool, error) {
 	url, err := serveTranscriptSession(sessionID)
 	if err != nil {
-		return "", err
+		return "", false, err
+	}
+	if noBrowser {
+		return url, false, nil
 	}
 	if err := openInBrowser(url); err != nil {
-		return url, fmt.Errorf("started server but failed to open browser: %w", err)
+		if errors.Is(err, errNoBrowserOpener) {
+			return url, false, nil
+		}
+		return url, false, fmt.Errorf("started server but failed to open browser: %w", err)
 	}
-	return url, nil
+	return url, true, nil
 }

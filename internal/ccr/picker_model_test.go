@@ -530,6 +530,45 @@ func TestPickerJSONLViewerMissingSessionShowsStatus(t *testing.T) {
 	}
 }
 
+// With no browser to open — a server, or -n — v still has to leave the URL
+// somewhere the reader can see and copy it.
+func TestPickerVShowsURLWhenNoBrowserIsOpened(t *testing.T) {
+	const id = "88888888-8888-8888-8888-888888888888"
+	setupFixtureSession(t, id, "hello")
+
+	t.Run("no opener on this machine", func(t *testing.T) {
+		t.Setenv("BROWSER", "")
+		withFallbackOpenerStub(t, nil)
+
+		m := pickerModel{sessions: []sessionEntry{{id: id}}, width: 90, height: 30}
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'v'})
+		pm := updated.(pickerModel)
+
+		if !strings.HasPrefix(pm.statusMsg, "serving at http://") {
+			t.Errorf("statusMsg = %q, want the transcript URL", pm.statusMsg)
+		}
+		if !strings.HasSuffix(pm.preview.servingURL, "/"+id) {
+			t.Errorf("preview.servingURL = %q, want the transcript URL", pm.preview.servingURL)
+		}
+	})
+
+	t.Run("-n with an opener available", func(t *testing.T) {
+		t.Setenv("BROWSER", "myopener")
+		captured := withStartCommandStub(t)
+
+		m := pickerModel{sessions: []sessionEntry{{id: id}}, width: 90, height: 30, noBrowser: true}
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'v'})
+		pm := updated.(pickerModel)
+
+		if len(*captured) > 0 {
+			t.Errorf("ran %v, want -n to leave the browser alone", *captured)
+		}
+		if !strings.HasPrefix(pm.statusMsg, "serving at http://") {
+			t.Errorf("statusMsg = %q, want the transcript URL", pm.statusMsg)
+		}
+	})
+}
+
 // n and p step a line in the jsonl viewer, so the session list moves with
 // them too rather than only with j and k.
 func TestPickerStepsWithNAndP(t *testing.T) {

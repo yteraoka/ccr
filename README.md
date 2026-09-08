@@ -65,6 +65,12 @@ By default, only sessions belonging to the current directory are targeted
 — every character outside `a-zA-Z0-9` in the cwd becomes `-`). Adding `-g`
 targets sessions from every project instead.
 
+On a machine with no browser — a server you are working on over SSH,
+typically — add `-n` (`-no-browser`) so that `v` only prints the transcript
+URL instead of trying to open it. `CCR_NO_BROWSER=1` does the same without
+the flag, and `ccr` behaves that way on its own whenever there is no way to
+open a browser at all. See [Viewing a full transcript (`v`)](#viewing-a-full-transcript-v).
+
 The terminal splits into two panes:
 
 - **Top pane** — sessions sorted by recency (most recently active first),
@@ -96,7 +102,8 @@ The terminal splits into two panes:
 ### Environment variables
 
 - `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`.
-- `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument. If `BROWSER` is unset, macOS falls back to opening the URL with `open`; on other platforms, an error is shown instead.
+- `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument. If `BROWSER` is unset, macOS falls back to opening the URL with `open`; on other platforms there is nothing to fall back to, so `v` shows the URL instead of opening it.
+- `CCR_NO_BROWSER` — set it to `1` (anything but `0`, `false`, `no`, or `off`) to make `v` show the transcript URL instead of opening a browser, the same as passing `-n`.
 - If a `.envrc` file exists in the destination directory, it is loaded via `direnv exec`.
 
 ## Inspecting the raw `jsonl` (`i`)
@@ -177,6 +184,23 @@ session you view afterwards; once it's running, the preview pane shows
 `Serving at: <url>` for the highlighted session even if you haven't
 pressed `v` on it yet. The picker keeps running — it doesn't exit after
 opening a transcript.
+
+### Without a browser
+
+Run `ccr -n` (or set `CCR_NO_BROWSER=1`) and `v` starts the server without
+opening anything, printing `serving at http://localhost:<port>/<session_id>`
+on the picker's bottom line for you to copy. `ccr` does this by itself when
+there is no browser to open — `$BROWSER` unset with no platform fallback —
+so a headless machine needs no flag at all.
+
+The server only listens on `127.0.0.1`, so to read the page from another
+machine, forward the port over SSH:
+
+```bash
+ssh -L 8000:localhost:8000 user@server
+```
+
+Then open the URL that `ccr` printed, on your own machine.
 
 ## Detecting already-running sessions
 

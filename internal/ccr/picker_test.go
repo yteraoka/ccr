@@ -1,6 +1,7 @@
 package ccr
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -103,19 +104,80 @@ func TestPrintUsage(t *testing.T) {
 
 func TestServeAndOpenTranscriptOpenBrowserFails(t *testing.T) {
 	setupFixtureSession(t, "77777777-7777-7777-7777-777777777777", "hello")
+	// An opener that exists but fails is a real error, unlike having no
+	// opener at all.
+	t.Setenv("BROWSER", "myopener")
+	withStartCommandStubErr(t, errors.New("exec: no such file"))
+
+	url, opened, err := serveAndOpenTranscript("77777777-7777-7777-7777-777777777777", false)
+	if url == "" {
+		t.Error("expected a URL even though opening the browser failed")
+	}
+	if opened {
+		t.Error("opened = true, want false when the opener failed")
+	}
+	if err == nil {
+		t.Fatal("expected an error when the opener fails")
+	}
+	if !strings.Contains(err.Error(), "failed to open browser") {
+		t.Errorf("err = %v, want it to mention failing to open the browser", err)
+	}
+}
+
+// On a machine with no browser to open — a server, typically — v still has
+// something useful to do: serve the transcript and hand back its URL.
+func TestServeAndOpenTranscriptWithoutAnyOpenerIsNotAnError(t *testing.T) {
+	setupFixtureSession(t, "77777777-7777-7777-7777-777777777777", "hello")
 	t.Setenv("BROWSER", "")
 	// Without this, running on a real Mac would actually shell out to
 	// `open <url>` and succeed, falsifying this test's premise.
 	withFallbackOpenerStub(t, nil)
 
-	url, err := serveAndOpenTranscript("77777777-7777-7777-7777-777777777777")
-	if url == "" {
-		t.Error("expected a URL even though opening the browser failed")
+	url, opened, err := serveAndOpenTranscript("77777777-7777-7777-7777-777777777777", false)
+	if err != nil {
+		t.Fatalf("serveAndOpenTranscript: %v", err)
 	}
-	if err == nil {
-		t.Fatal("expected an error when BROWSER is unset")
+	if opened {
+		t.Error("opened = true, want false when there is no opener")
 	}
-	if !strings.Contains(err.Error(), "failed to open browser") {
-		t.Errorf("err = %v, want it to mention failing to open the browser", err)
+	if !strings.HasSuffix(url, "/77777777-7777-7777-7777-777777777777") {
+		t.Errorf("url = %q, want the session's transcript URL", url)
+	}
+}
+
+// -n means "do not even try", so the browser must not be started even
+// where an opener is perfectly available.
+func TestServeAndOpenTranscriptNoBrowserSkipsTheOpener(t *testing.T) {
+	setupFixtureSession(t, "77777777-7777-7777-7777-777777777777", "hello")
+	t.Setenv("BROWSER", "myopener")
+	captured := withStartCommandStub(t)
+
+	url, opened, err := serveAndOpenTranscript("77777777-7777-7777-7777-777777777777", true)
+	if err != nil {
+		t.Fatalf("serveAndOpenTranscript: %v", err)
+	}
+	if opened {
+		t.Error("opened = true, want false with noBrowser set")
+	}
+	if len(*captured) > 0 {
+		t.Errorf("ran %v, want no opener to be started", *captured)
+	}
+	if !strings.HasSuffix(url, "/77777777-7777-7777-7777-777777777777") {
+		t.Errorf("url = %q, want the session's transcript URL", url)
+	}
+}
+
+func TestEnvIsTrue(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want bool
+	}{
+		{"", false}, {"0", false}, {"false", false}, {"no", false},
+		{"off", false}, {"OFF", false}, {" 0 ", false},
+		{"1", true}, {"true", true}, {"yes", true}, {"anything", true},
+	} {
+		if got := envIsTrue(c.in); got != c.want {
+			t.Errorf("envIsTrue(%q) = %v, want %v", c.in, got, c.want)
+		}
 	}
 }

@@ -24,6 +24,17 @@ func withStartCommandStub(t *testing.T) *[]string {
 	return &captured
 }
 
+// withStartCommandStubErr replaces startCommand with one that always
+// fails, so tests can exercise the path where an opener exists but cannot
+// be run.
+func withStartCommandStubErr(t *testing.T, err error) {
+	t.Helper()
+	orig := startCommand
+	t.Cleanup(func() { startCommand = orig })
+
+	startCommand = func([]string) error { return err }
+}
+
 // withFallbackOpenerStub replaces fallbackOpenerArgv for the duration of
 // the test and restores the original afterwards, so tests don't depend on
 // the real runtime.GOOS of the machine running them.
