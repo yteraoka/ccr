@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2.3.1](https://github.com/yteraoka/ccr/compare/v2.3.0...v2.3.1) - 2026-09-10
+
+- Update module github.com/mattn/go-runewidth to v0.0.30 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/81
+
 ## [v2.2.1](https://github.com/yteraoka/ccr/compare/v2.2.0...v2.2.1) - 2026-09-08
 
 - Lighten the transcript page palette by @yteraoka in https://github.com/yteraoka/ccr/pull/78
