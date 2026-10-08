@@ -1,5 +1,19 @@
 # Changelog
 
+## [v2.3.1](https://github.com/yteraoka/ccr/compare/v2.3.0...v2.3.1) - 2026-10-08
+
+- Update module github.com/mattn/go-runewidth to v0.0.30 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/81
+- Update Songmu/tagpr action to v1.20.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/83
+- Update Songmu/tagpr action to v1.21.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/84
+- Update dependency golangci-lint to v2.14.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/86
+- Update module charm.land/bubbletea/v2 to v2.0.10 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/85
+- Update Songmu/tagpr action to v1.21.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/87
+- Update Songmu/tagpr action to v1.21.2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/88
+- Update module github.com/mattn/go-runewidth to v0.0.31 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/89
+- Update dependency go to v1.27.2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/90
+- Update module github.com/charmbracelet/x/ansi to v0.11.9 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/91
+- Update module charm.land/bubbletea/v2 to v2.1.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/92
+
 ## [v2.2.1](https://github.com/yteraoka/ccr/compare/v2.2.0...v2.2.1) - 2026-09-08
 
 - Lighten the transcript page palette by @yteraoka in https://github.com/yteraoka/ccr/pull/78
