@@ -25,6 +25,8 @@ func main() {
 		err = ccr.RunHook(os.Stdin)
 	case os.Args[1] == "search":
 		err = ccr.RunSearch(os.Args[2:])
+	case os.Args[1] == "import":
+		err = ccr.RunImport(os.Args[2:])
 	case os.Args[1] == "-v" || os.Args[1] == "--version" || os.Args[1] == "version":
 		fmt.Printf("ccr version %s (commit %s, built at %s)\n", version, commit, date)
 		return

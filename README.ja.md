@@ -233,7 +233,24 @@ embedding モデルを設定すると意味による検索(SQLite の
 `async` にしておくと、hook(とその中で行う embedding の問い合わせ)がプロンプトの
 送信を待たせません。データベースは `${XDG_DATA_HOME:-$HOME/.local/share}/ccr/history.db`
 です([設定ファイル](#設定ファイル)の `history.db` か環境変数 `CCR_HISTORY_DB` で
-変更できます)。検索できるのは hook を登録した後に記録されたものだけです。
+変更できます)。
+
+### 既存のセッションの取り込み
+
+hook が記録するのは登録した後の会話だけです。それより前のセッションも検索できる
+ようにするには、transcript を取り込みます:
+
+```bash
+ccr import        # 現在の CLAUDE_CONFIG_DIR の全セッション
+ccr import -A     # 設定ファイルの config_dirs の全ディレクトリも対象
+```
+
+hook と同じく、入力したプロンプトと、ターンごとの Claude の最後の回答を記録します。
+既に履歴にあるメッセージ(hook や以前の import で記録したもの)は重複して追加せず、
+前回の取り込みから変わっていない transcript は読み直さないので、何度実行しても
+問題ありません。実行中のセッションで進行中のターンは取り込まず、終わった後の
+import で記録します。embedding モデルを設定していれば取り込んだメッセージをその場で
+embedding します(`-no-embed` を付けると次の `ccr search` に任せます)。
 
 ### 検索
 

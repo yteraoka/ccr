@@ -184,6 +184,21 @@ q / Esc / Ctrl-C で何も実行せず終了します。
 として SQLite に記録します。`last_assistant_message` が無い古い Claude Code では
 `transcript_path` の jsonl から、最後に人が入力したプロンプト以降の最後の assistant
 メッセージのテキストを取り出します。それ以外のイベントや空のテキストは何もしません。
+
+`ccr import [-A] [-no-embed]` は既存の transcript
+(`${CLAUDE_CONFIG_DIR}/projects/*/<session_id>.jsonl`、`-A` なら設定ファイルの全
+config ディレクトリ。sub agent の transcript は対象外)を履歴に取り込みます。
+hook が記録するものに合わせ、type = "user" のうち isMeta / isSidechain /
+isCompactSummary / promptSource = system でなく、tool_result を含まない行の
+テキスト(content の文字列、または text block の連結)をプロンプトとし
+(`[Request interrupted…`、`<local-command-…>`、`<bash-…>` は捨て、
+`<command-name>` 形式のスラッシュコマンドは `/name args` に戻す)、次のプロンプトまでの
+間でテキストを持つ最後の assistant メッセージ(同じ message.id の行の text block を
+連結)を回答とします。ファイル末尾の assistant 行の stop_reason が tool_use なら
+ターンが進行中なので、その回答は取り込みません。時刻と cwd は各行のものを使います。
+同じ session id・role・text のメッセージが既にあれば追加せず、取り込んだファイルの
+サイズと mtime を `imported_files` テーブルに記録して、変わっていなければ次回は
+読みません。embedding が設定されていれば最後に未処理のものを embedding します。
 UserPromptSubmit の stdout は会話に追加されるため、hook は stdout に何も書きません。
 
 - データベース: `CCR_HISTORY_DB`、設定ファイルの `history.db`、
