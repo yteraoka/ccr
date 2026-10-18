@@ -306,7 +306,7 @@ func TestServeTranscriptSessionServesSubagentPage(t *testing.T) {
 	setupFixtureSession(t, sessionID, "parent session")
 
 	// lay a sub agent transcript down beside the session fixture
-	sessionPath, err := findSessionFile(projectsDir(), sessionID)
+	sessionPath, err := lookupSessionFile(sessionID)
 	if err != nil {
 		t.Fatalf("findSessionFile: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestServeRawLineReturnsThatLineOnly(t *testing.T) {
 	const sessionID = "66666666-6666-6666-6666-666666666666"
 	setupFixtureSession(t, sessionID, "first prompt")
 
-	path, err := findSessionFile(projectsDir(), sessionID)
+	path, err := lookupSessionFile(sessionID)
 	if err != nil {
 		t.Fatalf("findSessionFile: %v", err)
 	}

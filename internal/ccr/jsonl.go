@@ -84,11 +84,6 @@ func configDir() string {
 	return filepath.Join(home, ".claude")
 }
 
-// projectsDir returns ${CLAUDE_CONFIG_DIR}/projects.
-func projectsDir() string {
-	return filepath.Join(configDir(), "projects")
-}
-
 var nonAlnumPattern = regexp.MustCompile(`[^a-zA-Z0-9]`)
 
 // encodeProjectDir converts a working directory path into the directory

@@ -17,13 +17,19 @@ import (
 // PrintUsage prints command-line usage help to stderr.
 func PrintUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  ccr [-g] [-n]        interactive session picker (current project, or -g for every project)
+  ccr [-g] [-A] [-n]   interactive session picker (current project, or -g for every project)
   ccr -v               print version and exit
 
 options:
   -g                   list sessions from every project, not just the current directory
+  -A                   list sessions from every config_dirs entry of the config file too,
+                       not just the current CLAUDE_CONFIG_DIR
   -n, -no-browser      on v, print the transcript URL instead of opening a browser
-                       (for machines with no browser; also settable with CCR_NO_BROWSER=1)`)
+                       (for machines with no browser; also settable with CCR_NO_BROWSER=1)
+
+config file (${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json, or $CCR_CONFIG):
+  {"config_dirs": ["~/.claude", "~/.claude-work"]}
+                       Claude Code config directories -A lists sessions from`)
 }
 
 // RunPicker implements the default ccr action: an interactive picker that
@@ -34,6 +40,7 @@ options:
 func RunPicker(args []string) error {
 	fs := flag.NewFlagSet("ccr", flag.ExitOnError)
 	global := fs.Bool("g", false, "list sessions from every project, not just the current directory")
+	allDirs := fs.Bool("A", false, "list sessions from every config directory in the config file")
 	noBrowser := fs.Bool("no-browser", envIsTrue(os.Getenv("CCR_NO_BROWSER")), "on v, show the transcript URL instead of opening a browser")
 	noBrowserShort := fs.Bool("n", false, "shorthand for -no-browser")
 	if err := fs.Parse(args); err != nil {
@@ -43,7 +50,15 @@ func RunPicker(args []string) error {
 		return fmt.Errorf("unexpected argument: %s", fs.Arg(0))
 	}
 
-	entries, err := sessionsForPicker(*global)
+	dirs := []string{configDir()}
+	if *allDirs {
+		var err error
+		if dirs, err = configDirs(); err != nil {
+			return err
+		}
+		useAllConfigDirs = true
+	}
+	entries, err := sessionsForPicker(dirs, *global)
 	if err != nil {
 		return err
 	}
@@ -51,7 +66,13 @@ func RunPicker(args []string) error {
 		fmt.Fprintln(os.Stderr, "no sessions found")
 		return nil
 	}
-	entries = attachRunningPIDs(entries, loadRunningSessionPIDs(sessionsDir()))
+	pids := make(map[string]int)
+	for _, dir := range dirs {
+		for id, pid := range loadRunningSessionPIDs(sessionsDir(dir)) {
+			pids[id] = pid
+		}
+	}
+	entries = attachRunningPIDs(entries, pids)
 
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].timestamp.After(entries[j].timestamp)
@@ -59,6 +80,7 @@ func RunPicker(args []string) error {
 
 	model := newPickerModel(entries)
 	model.noBrowser = *noBrowser || *noBrowserShort
+	model.showConfigDir = len(dirs) > 1
 	p := tea.NewProgram(model)
 	res, err := p.Run()
 	if err != nil {
@@ -72,28 +94,47 @@ func RunPicker(args []string) error {
 	return resumeSession(m.selected)
 }
 
-// sessionsForPicker returns every project's sessions when global is true,
-// otherwise only those belonging to the current working directory's project.
-func sessionsForPicker(global bool) ([]sessionEntry, error) {
-	if global {
-		return collectSessions(projectsDir())
+// sessionsForPicker returns, from every config directory in dirs, every
+// project's sessions when global is true, otherwise only those belonging to
+// the current working directory's project. A config directory without the
+// project (or without any projects at all) just contributes nothing.
+func sessionsForPicker(dirs []string, global bool) ([]sessionEntry, error) {
+	cwd := ""
+	if !global {
+		var err error
+		if cwd, err = os.Getwd(); err != nil {
+			return nil, err
+		}
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
+	var entries []sessionEntry
+	for _, dir := range dirs {
+		var sub []sessionEntry
+		var err error
+		if global {
+			sub, err = collectSessions(filepath.Join(dir, "projects"))
+		} else {
+			sub, err = collectSessionsInDir(filepath.Join(dir, "projects", encodeProjectDir(cwd)))
+		}
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for i := range sub {
+			sub[i].configDir = dir
+		}
+		entries = append(entries, sub...)
 	}
-	dir := filepath.Join(projectsDir(), encodeProjectDir(cwd))
-	entries, err := collectSessionsInDir(dir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	return entries, err
+	return entries, nil
 }
 
 // resumeSession moves into the session's original cwd and execs
 // `claude --resume <sessionID>` in place of the current process, mirroring
-// what shell `exec` does. If the cwd has a .envrc and direnv is on PATH,
+// what shell `exec` does. claude is pointed at the config directory the
+// session was found in (see resumeEnv), so a session listed from another
+// profile resumes in that profile. If the cwd has a .envrc and direnv is on PATH,
 // claude is launched through `direnv exec` so its environment is loaded;
 // direnv itself execs into claude, so no wrapper process is left behind.
 func resumeSession(entry sessionEntry) error {
@@ -117,7 +158,7 @@ func resumeSession(entry sessionEntry) error {
 		}
 	}
 
-	return syscall.Exec(argv0, args, os.Environ())
+	return syscall.Exec(argv0, args, resumeEnv(os.Environ(), entry.configDir))
 }
 
 // envIsTrue reports whether an environment variable's value asks for a

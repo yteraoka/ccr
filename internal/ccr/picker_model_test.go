@@ -51,6 +51,32 @@ func TestPreviewViewNoServingURL(t *testing.T) {
 	}
 }
 
+func TestPreviewViewConfigDir(t *testing.T) {
+	got := previewView(previewData{sessionID: "session-x", cwd: "/tmp/proj", configDir: "/home/u/.claude-work"}, 20, 100)
+	lines := strings.Split(got, "\n")
+	if len(lines) < 3 || lines[2] != "Config: /home/u/.claude-work" {
+		t.Errorf("want a Config: line right after Directory:, got %q", got)
+	}
+	if got := previewView(previewData{sessionID: "session-x", cwd: "/tmp/proj"}, 20, 100); strings.Contains(got, "Config:") {
+		t.Errorf("did not expect a Config: line without configDir: %s", got)
+	}
+}
+
+func TestLoadPreviewShowsConfigDirOnlyWhenAsked(t *testing.T) {
+	setupPreviewFixture(t, "session-a", "/tmp/proj-a")
+
+	m := newPickerModel([]sessionEntry{{id: "session-a", configDir: "/cfg"}})
+	if m.preview.configDir != "" {
+		t.Errorf("configDir = %q, want it hidden with a single config dir", m.preview.configDir)
+	}
+	m.showConfigDir = true
+	m.preview.sessionID = "" // force a re-read
+	m.loadPreview()
+	if m.preview.configDir != "/cfg" {
+		t.Errorf("configDir = %q, want /cfg", m.preview.configDir)
+	}
+}
+
 func TestPreviewViewError(t *testing.T) {
 	got := previewView(previewData{sessionID: "session-x", err: errors.New("boom")}, 20, 40)
 	if !strings.HasPrefix(got, "error: ") {

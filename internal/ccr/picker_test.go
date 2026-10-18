@@ -36,7 +36,7 @@ func TestSessionsForPickerScopedToCwd(t *testing.T) {
 	}
 	writeSessionFile(t, otherProjectDir, "session-b", "/somewhere/else")
 
-	entries, err := sessionsForPicker(false)
+	entries, err := sessionsForPicker([]string{configDir}, false)
 	if err != nil {
 		t.Fatalf("sessionsForPicker: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestSessionsForPickerGlobal(t *testing.T) {
 		writeSessionFile(t, dir, "session", "/proj")
 	}
 
-	entries, err := sessionsForPicker(true)
+	entries, err := sessionsForPicker([]string{configDir}, true)
 	if err != nil {
 		t.Fatalf("sessionsForPicker: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestSessionsForPickerNoProjectDir(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
 	t.Chdir(t.TempDir())
 
-	entries, err := sessionsForPicker(false)
+	entries, err := sessionsForPicker([]string{configDir}, false)
 	if err != nil {
 		t.Fatalf("sessionsForPicker: %v", err)
 	}

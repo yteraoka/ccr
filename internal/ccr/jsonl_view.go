@@ -113,7 +113,7 @@ func loadJSONLLines(path string) ([]jsonlLine, error) {
 
 // newJSONLViewer opens the preview of sessionID's jsonl.
 func newJSONLViewer(sessionID string) (*jsonlViewer, error) {
-	path, err := findSessionFile(projectsDir(), sessionID)
+	path, err := lookupSessionFile(sessionID)
 	if err != nil {
 		return nil, err
 	}
