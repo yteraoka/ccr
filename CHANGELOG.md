@@ -1,5 +1,10 @@
 # Changelog
 
+## [v3.2.0](https://github.com/yteraoka/ccr/compare/v3.1.0...v3.2.0) - 2026-10-18
+
+- Install the CPU-only PyTorch for the Ruri v3 server on Linux by @yteraoka in https://github.com/yteraoka/ccr/pull/105
+- Give embedding requests more time and smaller batches by @yteraoka in https://github.com/yteraoka/ccr/pull/107
+
 ## [v3.1.0](https://github.com/yteraoka/ccr/compare/v3.0.0...v3.1.0) - 2026-10-18
 
 - Add a script to run the Ruri v3 embedding server as a service by @yteraoka in https://github.com/yteraoka/ccr/pull/102
