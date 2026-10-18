@@ -1,5 +1,11 @@
 # Changelog
 
+## [v3.0.0](https://github.com/yteraoka/ccr/compare/v2.4.0...v3.0.0) - 2026-10-18
+
+- Record prompts and answers via hooks and search them with BM25 + vec1 by @yteraoka in https://github.com/yteraoka/ccr/pull/98
+- Add ccr import to bring existing transcripts into the history by @yteraoka in https://github.com/yteraoka/ccr/pull/100
+- Add ccr hook install/uninstall to register the history hooks by @yteraoka in https://github.com/yteraoka/ccr/pull/101
+
 ## [v2.4.0](https://github.com/yteraoka/ccr/compare/v2.3.0...v2.4.0) - 2026-10-18
 
 - Update module github.com/mattn/go-runewidth to v0.0.30 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/81
