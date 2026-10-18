@@ -5,7 +5,20 @@
 #     "sentence-transformers>=3.4.1",
 #     "transformers>=4.48.0",
 #     "sentencepiece",
+#     "torch",
 # ]
+#
+# # On Linux, torch from PyPI is the CUDA build and pulls in several GB of
+# # nvidia-* packages. Ruri v3 runs fine on the CPU, so take torch from
+# # PyTorch's CPU-only index there instead. (macOS and Windows wheels on PyPI
+# # carry no CUDA, and macOS still gets MPS from them.)
+# [tool.uv.sources]
+# torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+#
+# [[tool.uv.index]]
+# name = "pytorch-cpu"
+# url = "https://download.pytorch.org/whl/cpu"
+# explicit = true
 # ///
 """Serve Ruri v3 on an OpenAI-compatible embeddings endpoint for ccr.
 
@@ -39,7 +52,7 @@ def main() -> None:
                         help="model to serve (ruri-v3-30m / 70m / 130m / 310m)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--device", default=None, help="cpu, cuda, mps... (default: best available)")
+    parser.add_argument("--device", default=None, help="cpu or mps (default: best available; on Linux PyTorch is the CPU-only build)")
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--verbose", action="store_true", help="log every request")
     args = parser.parse_args()

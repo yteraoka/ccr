@@ -357,7 +357,10 @@ uv run https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embeddin
 
 サーバーは `http://127.0.0.1:8080/v1/embeddings` で `cl-nagoya/ruri-v3-310m` を
 提供します。`--model cl-nagoya/ruri-v3-130m`(または `-70m`、`-30m`)で精度と
-引き換えに軽くでき、`--port` / `--device` も指定できます。モデルを変えたときは
+引き換えに軽くでき、`--port` / `--device` も指定できます。
+CPU(macOS では Apple シリコンの GPU も)で動かす前提で、Linux では PyTorch を
+PyTorch の CPU 専用インデックスから入れるため、PyPI 版が依存する数 GB の CUDA
+(`nvidia-*`)パッケージはインストールされません。モデルを変えたときは
 設定ファイルの `model` も同じものにしてください。ccr は名前に `ruri-v3` を含む
 モデルには Ruri v3 が前提とする `検索クエリ: ` / `検索文書: ` の prefix を自動で
 付けるので、他の方法(GGUF に変換したものを llama.cpp で、Text Embeddings

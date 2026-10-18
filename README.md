@@ -368,6 +368,9 @@ and turn vector search on with an empty `embedding` section:
 The server listens on `http://127.0.0.1:8080/v1/embeddings` and serves
 `cl-nagoya/ruri-v3-310m`; `--model cl-nagoya/ruri-v3-130m` (or `-70m`,
 `-30m`) trades accuracy for speed, and `--port` / `--device` are there too.
+It runs on the CPU (or Apple silicon's GPU): on Linux it takes PyTorch from
+PyTorch's CPU-only index, so none of the several GB of CUDA (`nvidia-*`)
+packages the PyPI build depends on are installed.
 Name the same model in the config if you change it. ccr adds the
 `検索クエリ: ` / `検索文書: ` prefixes Ruri v3 is trained with to every model
 whose name contains `ruri-v3`, so any other server for it (llama.cpp with a
