@@ -233,7 +233,9 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
   `document_prefix`)があればベクトル検索を有効にします。既定のモデルは Ruri v3
   (`url` 省略時 `http://127.0.0.1:8080/v1/embeddings`、`model` 省略時
   `cl-nagoya/ruri-v3-310m`)で、`scripts/ruri-embedding-server.py`(uv で実行する
-  sentence-transformers のサーバー、prefix は付けない)がその既定に合わせて listen
+  sentence-transformers のサーバー、prefix は付けない。Linux では inline metadata の
+  `[tool.uv.sources]` で torch を `https://download.pytorch.org/whl/cpu` から取り、
+  CUDA の nvidia-* パッケージを入れない)がその既定に合わせて listen
   します。`scripts/ruri-embedding-service.sh install|uninstall|status` はこのサーバーを
   `~/.local/share/ccr/` にコピーして(リポジトリ外なら GitHub から取得)、macOS では
   launchd の LaunchAgent、`/run/systemd/system` がある Linux / WSL では systemd の
