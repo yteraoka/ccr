@@ -28,8 +28,11 @@ const keyLegend = "j/k/n/p: move  space/b: page  /: filter  enter: resume  i: js
 // even when reading the session failed, so a broken session is not re-read
 // on every keystroke.
 type previewData struct {
-	sessionID  string
-	cwd        string
+	sessionID string
+	cwd       string
+	// configDir is the config directory the session was found in, shown
+	// only when sessions are listed from more than one.
+	configDir  string
 	size       int64
 	aiTitle    string
 	prompts    []string
@@ -66,6 +69,10 @@ type pickerModel struct {
 	// transcript URL in the status line instead. Its zero value is the
 	// normal behavior, so a picker built without it still opens a browser.
 	noBrowser bool
+
+	// showConfigDir adds the session's config directory to the preview,
+	// which only tells sessions apart when more than one is listed.
+	showConfigDir bool
 
 	selected sessionEntry
 }
@@ -186,7 +193,7 @@ func (m *pickerModel) loadPreview() {
 	}
 	m.preview.sessionID = id
 
-	path, err := findSessionFile(projectsDir(), id)
+	path, err := lookupSessionFile(id)
 	if err != nil {
 		m.resetPreview(err)
 		return
@@ -201,9 +208,14 @@ func (m *pickerModel) loadPreview() {
 		m.resetPreview(err)
 		return
 	}
+	configDir := ""
+	if m.showConfigDir {
+		configDir = session.configDir
+	}
 	m.preview = previewData{
 		sessionID:  id,
 		cwd:        parsed.cwd,
+		configDir:  configDir,
 		size:       info.Size(),
 		aiTitle:    parsed.aiTitle,
 		prompts:    parsed.prompts,
@@ -446,6 +458,9 @@ func previewView(p previewData, height, width int) string {
 	lines := []string{
 		truncate("Session: "+p.sessionID, width),
 		truncate("Directory: "+p.cwd, width),
+	}
+	if p.configDir != "" {
+		lines = append(lines, truncate("Config: "+p.configDir, width))
 	}
 	if p.aiTitle != "" {
 		lines = append(lines, truncate("Title: "+p.aiTitle, width))

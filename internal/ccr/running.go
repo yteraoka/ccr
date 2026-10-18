@@ -9,11 +9,11 @@ import (
 	"syscall"
 )
 
-// sessionsDir returns ${CLAUDE_CONFIG_DIR}/sessions, where Claude Code
-// records a {pid}.json snapshot for every running (or not cleanly
-// terminated) claude process.
-func sessionsDir() string {
-	return filepath.Join(configDir(), "sessions")
+// sessionsDir returns <configDir>/sessions, where Claude Code records a
+// {pid}.json snapshot for every running (or not cleanly terminated) claude
+// process.
+func sessionsDir(configDir string) string {
+	return filepath.Join(configDir, "sessions")
 }
 
 // sessionPidRecord is the subset of a ${CLAUDE_CONFIG_DIR}/sessions/{pid}.json

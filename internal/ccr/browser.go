@@ -88,7 +88,7 @@ func handleTranscriptRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path, err := findSessionFile(projectsDir(), sessionID)
+	path, err := lookupSessionFile(sessionID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return

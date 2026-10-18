@@ -17,6 +17,9 @@ type sessionEntry struct {
 	// tokens is the session's cumulative token usage: input + output +
 	// cache tokens summed across every assistant message.
 	tokens int
+	// configDir is the Claude Code config directory (CLAUDE_CONFIG_DIR)
+	// the session file was found under; claude is resumed with it.
+	configDir string
 }
 
 // collectSessions walks ${CLAUDE_CONFIG_DIR}/projects/<dir>/<session_id>.jsonl

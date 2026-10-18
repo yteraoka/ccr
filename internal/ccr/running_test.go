@@ -7,10 +7,9 @@ import (
 )
 
 func TestSessionsDir(t *testing.T) {
-	t.Setenv("CLAUDE_CONFIG_DIR", "/custom/config")
 	want := filepath.Join("/custom/config", "sessions")
-	if got := sessionsDir(); got != want {
-		t.Errorf("sessionsDir() = %q, want %q", got, want)
+	if got := sessionsDir("/custom/config"); got != want {
+		t.Errorf("sessionsDir(/custom/config) = %q, want %q", got, want)
 	}
 }
 
