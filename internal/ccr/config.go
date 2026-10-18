@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 )
 
 // fileConfig is the content of ccr's own config file.
@@ -140,13 +142,38 @@ func configDirs() ([]string, error) {
 // directory of the config file, not just the current one.
 var useAllConfigDirs bool
 
+// knownConfigDirs are config directories sessions have been seen in
+// outside the ones being listed: the history search finds messages from
+// any of them, and its i and v must still reach those sessions' files. It
+// is read by the transcript server's goroutines, hence the lock.
+var knownConfigDirs struct {
+	sync.Mutex
+	dirs []string
+}
+
+// rememberConfigDir adds dir to the directories lookupSessionFile searches.
+func rememberConfigDir(dir string) {
+	if dir == "" {
+		return
+	}
+	knownConfigDirs.Lock()
+	defer knownConfigDirs.Unlock()
+	if !slices.Contains(knownConfigDirs.dirs, dir) {
+		knownConfigDirs.dirs = append(knownConfigDirs.dirs, dir)
+	}
+}
+
 // lookupSessionFile finds sessionID's jsonl in the current config
-// directory, or with -A in any of them, the first one holding it winning.
+// directory (with -A, in any of them; then in any rememberConfigDir added),
+// the first one holding it winning.
 func lookupSessionFile(sessionID string) (string, error) {
 	dirs := []string{configDir()}
 	if useAllConfigDirs {
 		dirs, _ = configDirs()
 	}
+	knownConfigDirs.Lock()
+	dirs = append(dirs, knownConfigDirs.dirs...)
+	knownConfigDirs.Unlock()
 	for _, dir := range dirs {
 		if path, err := findSessionFile(filepath.Join(dir, "projects"), sessionID); err == nil {
 			return path, nil

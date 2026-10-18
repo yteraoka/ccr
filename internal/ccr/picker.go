@@ -85,6 +85,7 @@ func RunPicker(args []string) error {
 	model := newPickerModel(entries)
 	model.noBrowser = *noBrowser || *noBrowserShort
 	model.showConfigDir = len(dirs) > 1
+	model.global = *global
 	p := tea.NewProgram(model)
 	res, err := p.Run()
 	if err != nil {

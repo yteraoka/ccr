@@ -21,7 +21,7 @@ var (
 
 const promptBullet = "·" // U+00B7 MIDDLE DOT, representable in Latin-1
 
-const keyLegend = "j/k/n/p: move  space/b: page  /: filter  enter: resume  i: jsonl  q: quit"
+const keyLegend = "j/k/n/p: move  space/b: page  /: filter  s: history  enter: resume  i: jsonl  q: quit"
 
 // previewData is everything the bottom pane shows about the highlighted
 // session. sessionID doubles as loadPreview's cache key: it is filled in
@@ -58,6 +58,12 @@ type pickerModel struct {
 	// stays underneath it and is shown again when it closes.
 	viewer *jsonlViewer
 
+	// history is the prompt/answer search screen once s has opened it. It
+	// is kept when closed, so s brings the last search back.
+	history *historyView
+	// global is -g: the history screen then searches every project too.
+	global bool
+
 	search incrementalSearch
 	// matches are the indices into sessions the filter leaves showing; the
 	// cursor and every key walk these, not the whole list.
@@ -93,12 +99,20 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
+	case historyResultsMsg:
+		if m.history != nil {
+			m.history.finish(msg)
+		}
+
 	case tea.KeyPressMsg:
 		if m.viewer != nil {
 			if m.viewer.update(msg.String(), msg.Text, m.viewWidth(), m.viewHeight()) {
 				m.viewer = nil
 			}
 			return m, nil
+		}
+		if m.history != nil && m.history.open {
+			return m.updateHistory(msg)
 		}
 		if changed, handled := m.search.key(msg.String(), msg.Text); handled {
 			if changed {
@@ -119,6 +133,12 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "/":
 			m.search.begin()
+		case "s":
+			if m.history == nil {
+				m.history = newHistoryView(m.global)
+			} else {
+				m.history.open, m.history.typing = true, true
+			}
 		// n and p step a line in the jsonl viewer, so they do the same here
 		case "up", "k", "p":
 			m.moveCursor(-1)
@@ -155,23 +175,26 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			url, opened, err := serveAndOpenTranscript(session.id, m.noBrowser)
-			m.preview.servingURL = url
-			switch {
-			case err != nil:
-				m.statusMsg = "error: " + err.Error()
-			case opened:
-				m.statusMsg = ""
-			default:
-				// No browser was opened, either because -n asked for that
-				// or because this machine has no opener. The URL is then
-				// the whole point of pressing v, so put it where it can be
-				// read and copied.
-				m.statusMsg = "serving at " + url
-			}
+			m.preview.servingURL, m.statusMsg = m.openTranscript(session.id)
 		}
 	}
 	return m, nil
+}
+
+// openTranscript serves sessionID's transcript and opens it in a browser
+// (unless -n), returning its URL and the status line to show.
+func (m pickerModel) openTranscript(sessionID string) (url, status string) {
+	url, opened, err := serveAndOpenTranscript(sessionID, m.noBrowser)
+	switch {
+	case err != nil:
+		return url, "error: " + err.Error()
+	case opened:
+		return url, ""
+	}
+	// No browser was opened, either because -n asked for that or because
+	// this machine has no opener. The URL is then the whole point of
+	// pressing v, so put it where it can be read and copied.
+	return url, "serving at " + url
 }
 
 // loadPreview parses the currently highlighted session's file so the
@@ -353,6 +376,11 @@ func (m pickerModel) View() tea.View {
 
 	if m.viewer != nil {
 		v := tea.NewView(m.viewer.view(width, height))
+		v.AltScreen = true
+		return v
+	}
+	if m.history != nil && m.history.open {
+		v := tea.NewView(m.history.view(width, height))
 		v.AltScreen = true
 		return v
 	}

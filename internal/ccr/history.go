@@ -165,73 +165,32 @@ func RunSearch(args []string) error {
 		return fmt.Errorf("-role must be user or assistant, not %q", *role)
 	}
 
-	cfg, err := loadFileConfig(ccrConfigPath())
+	b, err := openHistoryBackend()
 	if err != nil {
 		return err
 	}
-	e := newEmbedder(cfg.History.Embedding)
-	switch *mode {
-	case "":
-		*mode = searchKeyword
-		if e != nil {
-			*mode = searchHybrid
-		}
-	case searchKeyword:
-	case searchHybrid, searchVector:
-		if e == nil {
-			return fmt.Errorf("-mode %s needs history.embedding in %s", *mode, ccrConfigPath())
-		}
-	default:
-		return fmt.Errorf("-mode must be hybrid, keyword or vector, not %q", *mode)
+	defer b.h.Close() //nolint:errcheck
+	if *mode, err = b.resolveMode(*mode); err != nil {
+		return err
 	}
 
-	path, err := historyDBPath(cfg.History)
-	if err != nil {
-		return err
-	}
-	h, err := openHistoryDB(path)
-	if err != nil {
-		return err
-	}
-	defer h.Close() //nolint:errcheck
-
-	filter := historyFilter{role: *role}
+	req := historyRequest{query: query, mode: *mode, filter: historyFilter{role: *role}, limit: *limit}
 	if !*global {
-		if filter.cwd, err = os.Getwd(); err != nil {
+		if req.filter.cwd, err = os.Getwd(); err != nil {
 			return err
 		}
 	}
-
-	ctx := context.Background()
-	candidates := max(*limit*5, 50)
-	var rankings [][]int64
-	if *mode != searchKeyword {
-		ids, err := vectorRanking(ctx, h, e, query, filter, candidates)
-		if err != nil {
-			if *mode == searchVector {
-				return err
-			}
-			fmt.Fprintf(os.Stderr, "ccr: vector search skipped: %v\n", err)
+	results, warning, err := b.search(context.Background(), req, func(done, total int) {
+		fmt.Fprintf(os.Stderr, "\rembedding %d/%d messages...", done, total)
+		if done == total {
+			fmt.Fprintln(os.Stderr)
 		}
-		rankings = append(rankings, ids)
-	}
-	if *mode != searchVector {
-		if match := ftsQuery(query); match != "" {
-			ids, err := h.keywordSearch(match, filter, candidates)
-			if err != nil {
-				return err
-			}
-			rankings = append(rankings, ids)
-		}
-	}
-
-	ids := fuseRankings(rankings...)
-	if len(ids) > *limit {
-		ids = ids[:*limit]
-	}
-	results, err := h.messages(ids)
+	})
 	if err != nil {
 		return err
+	}
+	if warning != nil {
+		fmt.Fprintf(os.Stderr, "ccr: %v\n", warning)
 	}
 	if len(results) == 0 {
 		fmt.Fprintln(os.Stderr, "no matches")
@@ -241,19 +200,103 @@ func RunSearch(args []string) error {
 	return err
 }
 
+// historyBackend is what a search needs: the database, and the embedder
+// when vector search is configured.
+type historyBackend struct {
+	h *historyDB
+	e *embedder
+}
+
+// openHistoryBackend reads the config file and opens the history
+// database. The caller closes b.h.
+func openHistoryBackend() (*historyBackend, error) {
+	cfg, err := loadFileConfig(ccrConfigPath())
+	if err != nil {
+		return nil, err
+	}
+	path, err := historyDBPath(cfg.History)
+	if err != nil {
+		return nil, err
+	}
+	h, err := openHistoryDB(path)
+	if err != nil {
+		return nil, err
+	}
+	return &historyBackend{h: h, e: newEmbedder(cfg.History.Embedding)}, nil
+}
+
+// resolveMode checks a requested search mode against the configuration,
+// turning "" into the default: hybrid when there is an embedding model,
+// keyword otherwise.
+func (b *historyBackend) resolveMode(mode string) (string, error) {
+	switch mode {
+	case "":
+		if b.e != nil {
+			return searchHybrid, nil
+		}
+		return searchKeyword, nil
+	case searchKeyword:
+		return mode, nil
+	case searchHybrid, searchVector:
+		if b.e == nil {
+			return "", fmt.Errorf("-mode %s needs history.embedding in %s", mode, ccrConfigPath())
+		}
+		return mode, nil
+	}
+	return "", fmt.Errorf("-mode must be hybrid, keyword or vector, not %q", mode)
+}
+
+// historyRequest is one search: the query as typed, how to rank, what to
+// narrow to, and how many results to return.
+type historyRequest struct {
+	query  string
+	mode   string
+	filter historyFilter
+	limit  int
+}
+
+// search runs req and returns the matches best first. When the vector half
+// of a hybrid search fails (the embedding server is down, say) the keyword
+// half still answers, and the failure comes back as warning. progress, if
+// set, follows the embedding of messages still waiting for a vector.
+func (b *historyBackend) search(ctx context.Context, req historyRequest, progress func(done, total int)) (results []historyMessage, warning, err error) {
+	candidates := max(req.limit*5, 50)
+	var rankings [][]int64
+	if req.mode != searchKeyword {
+		ids, err := vectorRanking(ctx, b.h, b.e, req.query, req.filter, candidates, progress)
+		if err != nil {
+			if req.mode == searchVector {
+				return nil, nil, err
+			}
+			warning = fmt.Errorf("vector search skipped: %w", err)
+		}
+		rankings = append(rankings, ids)
+	}
+	if req.mode != searchVector {
+		if match := ftsQuery(req.query); match != "" {
+			ids, err := b.h.keywordSearch(match, req.filter, candidates)
+			if err != nil {
+				return nil, warning, err
+			}
+			rankings = append(rankings, ids)
+		}
+	}
+
+	ids := fuseRankings(rankings...)
+	if len(ids) > req.limit {
+		ids = ids[:req.limit]
+	}
+	results, err = b.h.messages(ids)
+	return results, warning, err
+}
+
 // vectorRanking embeds whatever is still waiting for a vector, then the
 // query, and returns the nearest messages.
-func vectorRanking(ctx context.Context, h *historyDB, e *embedder, query string, f historyFilter, limit int) ([]int64, error) {
+func vectorRanking(ctx context.Context, h *historyDB, e *embedder, query string, f historyFilter, limit int, progress func(done, total int)) ([]int64, error) {
 	if err := h.prepareVectors(e.key()); err != nil {
 		return nil, err
 	}
-	err := h.embedPending(ctx, e, func(done, total int) {
-		fmt.Fprintf(os.Stderr, "\rembedding %d/%d messages...", done, total)
-		if done == total {
-			fmt.Fprintln(os.Stderr)
-		}
-	})
-	if err != nil {
+	if err := h.embedPending(ctx, e, progress); err != nil {
 		return nil, err
 	}
 	vec, err := e.embedQuery(ctx, query)
@@ -276,11 +319,7 @@ func formatSearchResults(results []historyMessage, query string, showCwd, color 
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		who := "you"
-		if m.role == "assistant" {
-			who = "claude"
-		}
-		header := fmt.Sprintf("%s  %-6s  %s", m.createdAt.Local().Format("2006-01-02 15:04"), who, m.sessionID)
+		header := fmt.Sprintf("%s  %-6s  %s", m.createdAt.Local().Format("2006-01-02 15:04"), roleLabel(m.role), m.sessionID)
 		if showCwd && m.cwd != "" {
 			header += "  " + filepath.Base(m.cwd)
 		}
@@ -320,27 +359,7 @@ func foldRunes(s string) []rune {
 // color is set.
 func snippet(text string, terms [][]rune, width int, color bool) string {
 	src := []rune(strings.Join(strings.FieldsFunc(text, unicode.IsSpace), " "))
-	folded := make([]rune, len(src))
-	for i, r := range src {
-		folded[i] = normalizeRune(r)
-	}
-
-	// mark every rune covered by a term
-	hit := make([]bool, len(src))
-	first := -1
-	for _, t := range terms {
-		for i := 0; i+len(t) <= len(folded); i++ {
-			if string(folded[i:i+len(t)]) != string(t) {
-				continue
-			}
-			for j := i; j < i+len(t); j++ {
-				hit[j] = true
-			}
-			if first < 0 || i < first {
-				first = i
-			}
-		}
-	}
+	hit, first := markTerms(src, terms)
 
 	start := 0
 	if first > width/3 {
@@ -355,9 +374,46 @@ func snippet(text string, terms [][]rune, width int, color bool) string {
 	if start > 0 {
 		b.WriteString("…")
 	}
-	for i := start; i < end; {
+	b.WriteString(renderHits(src[start:end], hit[start:end], color))
+	if end < len(src) {
+		b.WriteString("…")
+	}
+	return b.String()
+}
+
+// markTerms reports which runes of src fall inside an occurrence of any of
+// terms (compared folded, as the index compares them), and where the first
+// occurrence starts (-1 if none does).
+func markTerms(src []rune, terms [][]rune) (hit []bool, first int) {
+	folded := make([]rune, len(src))
+	for i, r := range src {
+		folded[i] = normalizeRune(r)
+	}
+	hit = make([]bool, len(src))
+	first = -1
+	for _, t := range terms {
+		for i := 0; i+len(t) <= len(folded); i++ {
+			if string(folded[i:i+len(t)]) != string(t) {
+				continue
+			}
+			for j := i; j < i+len(t); j++ {
+				hit[j] = true
+			}
+			if first < 0 || i < first {
+				first = i
+			}
+		}
+	}
+	return hit, first
+}
+
+// renderHits writes src with the runes marked in hit highlighted, or plain
+// when color is off.
+func renderHits(src []rune, hit []bool, color bool) string {
+	var b strings.Builder
+	for i := 0; i < len(src); {
 		j := i
-		for j < end && hit[j] == hit[i] {
+		for j < len(src) && hit[j] == hit[i] {
 			j++
 		}
 		part := string(src[i:j])
@@ -366,9 +422,6 @@ func snippet(text string, terms [][]rune, width int, color bool) string {
 		}
 		b.WriteString(part)
 		i = j
-	}
-	if end < len(src) {
-		b.WriteString("…")
 	}
 	return b.String()
 }

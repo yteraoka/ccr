@@ -98,6 +98,7 @@ The terminal splits into two panes:
 | `Space`/`PageDown`, `b`/`Backspace`/`PageUp` | Page through the list |
 | `g`, `G` | Jump to the first or last session |
 | `/` | Filter the list as you type (id and directory) |
+| `s` | Search past prompts and answers (see [below](#in-the-picker-s)) |
 | `Enter` | Resume the selected session (`cd` + `exec claude --resume <id>`) |
 | `i` | Inspect the selected session's raw `jsonl` without leaving the terminal |
 | `v` | View the full transcript of the selected session in your browser (see below) |
@@ -253,6 +254,25 @@ ccr search -g -role user -l 20 hook   # only your prompts, 20 results
 
 Each result shows its time, who said it, and the session id (for
 `claude --resume`), with the matching part of the text highlighted.
+
+### In the picker (`s`)
+
+Press `s` in the session list, type the query and press `Enter`. The
+results are listed with the matching part highlighted, and the message
+under the cursor is shown in full below the list, scrolled to where it
+matches. From a result:
+
+| Key | Action |
+| --- | --- |
+| `↑`/`↓`, `j`/`k`, `n`/`p`, `Space`/`b`, `g`/`G` | Move, as in the session list |
+| `Enter` | Resume the session the message is from |
+| `i` / `v` | Open that session's `jsonl` / transcript, as in the session list |
+| `s`, `/` | Edit the query and search again |
+| `q`, `Esc` | Back to the session list (`s` brings the last search back) |
+
+It searches the current directory's messages, or every project's under
+`ccr -g`, with the default mode (`hybrid` when an embedding model is
+configured).
 
 Keyword search splits the query on spaces; every word must appear.
 Japanese in the query is split into words with the morphological analyzer
