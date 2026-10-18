@@ -196,7 +196,12 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
   文字・数字の連続は1語とし、全角英数字→半角、半角カナ→全角、小文字化で正規化します。
 - 設定ファイルの `history.embedding`(OpenAI 互換の `/v1/embeddings`:
   `url` / `model` / `api_key_env` / `dimensions` / `query_prefix` /
-  `document_prefix`)があればベクトル検索を有効にします。vec1 の仮想テーブル
+  `document_prefix`)があればベクトル検索を有効にします。既定のモデルは Ruri v3
+  (`url` 省略時 `http://127.0.0.1:8080/v1/embeddings`、`model` 省略時
+  `cl-nagoya/ruri-v3-310m`)で、`scripts/ruri-embedding-server.py`(uv で実行する
+  sentence-transformers のサーバー、prefix は付けない)がその既定に合わせて listen
+  します。名前に `ruri-v3` を含むモデルには、`query_prefix` / `document_prefix` が
+  未指定なら `検索クエリ: ` / `検索文書: ` を付けます(`""` を指定すれば付けません)。vec1 の仮想テーブル
   `messages_vec`(flat index、cos 距離、最初のベクトルで次元が決まるため初回保存時に
   作成)に rowid = messages.id で保存します。hook は記録直後にそのメッセージを
   embedding し、失敗したもの・未処理のものは `ccr search` が検索前にまとめて

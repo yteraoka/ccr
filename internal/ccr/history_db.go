@@ -143,21 +143,15 @@ const (
 	historyVecTable = "messages_vec"
 )
 
-// embeddingKey identifies the vectors a configuration produces: vectors
-// from different models (or sizes) are not comparable.
-func embeddingKey(cfg embeddingConfig) string {
-	return cfg.Model + "@" + cfg.URL + "#" + strconv.Itoa(cfg.Dimensions) + "|" + cfg.DocumentPrefix
-}
-
-// prepareVectors makes sure the stored vectors came from the configured
-// model, dropping them all (to be embedded again) when the model changed.
-func (h *historyDB) prepareVectors(cfg embeddingConfig) error {
+// prepareVectors makes sure the stored vectors came from the embedding
+// configuration identified by key (see embedder.key), dropping them all
+// (to be embedded again) when it changed.
+func (h *historyDB) prepareVectors(key string) error {
 	var stored string
 	err := h.db.QueryRow(`SELECT value FROM meta WHERE key = ?`, metaEmbeddingModel).Scan(&stored)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	key := embeddingKey(cfg)
 	if stored == key {
 		return nil
 	}

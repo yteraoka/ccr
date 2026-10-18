@@ -10,6 +10,8 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -22,30 +24,75 @@ const embeddingMaxRunes = 6000
 // embeddingTimeout bounds one request to the embeddings endpoint.
 const embeddingTimeout = 60 * time.Second
 
-// embedder turns texts into vectors through an embeddingConfig's endpoint.
-type embedder struct {
-	cfg    embeddingConfig
-	client *http.Client
+// The embedding model used when the config file names none: Ruri v3, a
+// Japanese embedding model, at the address scripts/ruri-embedding-server.py
+// (and llama.cpp's llama-server) listens on by default.
+const (
+	defaultEmbeddingURL   = "http://127.0.0.1:8080/v1/embeddings"
+	defaultEmbeddingModel = "cl-nagoya/ruri-v3-310m"
+)
+
+// Ruri v3 is trained with a prefix marking what a text is for, and
+// retrieves noticeably worse without it.
+const (
+	ruriV3QueryPrefix    = "検索クエリ: "
+	ruriV3DocumentPrefix = "検索文書: "
+)
+
+// isRuriV3 reports whether model names a Ruri v3 embedding model, however
+// it is served ("cl-nagoya/ruri-v3-310m", "ruri-v3-130m", a GGUF file...).
+func isRuriV3(model string) bool {
+	return strings.Contains(strings.ToLower(model), "ruri-v3")
 }
 
-func newEmbedder(cfg *embeddingConfig) (*embedder, error) {
+// embedder turns texts into vectors through an embeddingConfig's endpoint.
+type embedder struct {
+	cfg            embeddingConfig
+	queryPrefix    string
+	documentPrefix string
+	client         *http.Client
+}
+
+// newEmbedder returns nil (no vector search) when cfg is nil, and otherwise
+// fills in what cfg leaves out: Ruri v3 at defaultEmbeddingURL, and the
+// model's own prefixes.
+func newEmbedder(cfg *embeddingConfig) *embedder {
 	if cfg == nil {
-		return nil, nil
+		return nil
 	}
-	if cfg.URL == "" || cfg.Model == "" {
-		return nil, fmt.Errorf("history.embedding needs both url and model")
+	e := &embedder{cfg: *cfg, client: &http.Client{Timeout: embeddingTimeout}}
+	if e.cfg.URL == "" {
+		e.cfg.URL = defaultEmbeddingURL
 	}
-	return &embedder{cfg: *cfg, client: &http.Client{Timeout: embeddingTimeout}}, nil
+	if e.cfg.Model == "" {
+		e.cfg.Model = defaultEmbeddingModel
+	}
+	if isRuriV3(e.cfg.Model) {
+		e.queryPrefix, e.documentPrefix = ruriV3QueryPrefix, ruriV3DocumentPrefix
+	}
+	if cfg.QueryPrefix != nil {
+		e.queryPrefix = *cfg.QueryPrefix
+	}
+	if cfg.DocumentPrefix != nil {
+		e.documentPrefix = *cfg.DocumentPrefix
+	}
+	return e
+}
+
+// key identifies the vectors e produces: vectors from different models,
+// sizes or document prefixes are not comparable.
+func (e *embedder) key() string {
+	return e.cfg.Model + "@" + e.cfg.URL + "#" + strconv.Itoa(e.cfg.Dimensions) + "|" + e.documentPrefix
 }
 
 // embedDocuments embeds texts to be stored.
 func (e *embedder) embedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
-	return e.embed(ctx, e.cfg.DocumentPrefix, texts)
+	return e.embed(ctx, e.documentPrefix, texts)
 }
 
 // embedQuery embeds a search query.
 func (e *embedder) embedQuery(ctx context.Context, query string) ([]float32, error) {
-	vecs, err := e.embed(ctx, e.cfg.QueryPrefix, []string{query})
+	vecs, err := e.embed(ctx, e.queryPrefix, []string{query})
 	if err != nil {
 		return nil, err
 	}

@@ -88,11 +88,11 @@ func RunHook(stdin io.Reader) error {
 		return err
 	}
 
-	e, err := newEmbedder(cfg.History.Embedding)
-	if err != nil || e == nil {
-		return err
+	e := newEmbedder(cfg.History.Embedding)
+	if e == nil {
+		return nil
 	}
-	if err := h.prepareVectors(e.cfg); err != nil {
+	if err := h.prepareVectors(e.key()); err != nil {
 		return err
 	}
 	vecs, err := e.embedDocuments(context.Background(), []string{text})
@@ -169,10 +169,7 @@ func RunSearch(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := newEmbedder(cfg.History.Embedding)
-	if err != nil {
-		return err
-	}
+	e := newEmbedder(cfg.History.Embedding)
 	switch *mode {
 	case "":
 		*mode = searchKeyword
@@ -247,7 +244,7 @@ func RunSearch(args []string) error {
 // vectorRanking embeds whatever is still waiting for a vector, then the
 // query, and returns the nearest messages.
 func vectorRanking(ctx context.Context, h *historyDB, e *embedder, query string, f historyFilter, limit int) ([]int64, error) {
-	if err := h.prepareVectors(e.cfg); err != nil {
+	if err := h.prepareVectors(e.key()); err != nil {
 		return nil, err
 	}
 	err := h.embedPending(ctx, e, func(done, total int) {

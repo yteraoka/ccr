@@ -260,27 +260,48 @@ ccr search -g -role user -l 20 hook   # 自分のプロンプトだけを 20 件
 
 ### ベクトル検索
 
-設定ファイルに OpenAI 互換の embeddings エンドポイントを追加します。Ollama、
-LM Studio、llama.cpp、OpenAI、Voyage AI のいずれも使えます。例えば Ollama で
-ローカルの多言語モデルを使う場合(`ollama pull bge-m3`):
+ベクトル検索の既定のモデルは日本語の embedding モデル
+[Ruri v3](https://huggingface.co/collections/cl-nagoya/ruri-v3) です。付属の
+サーバーを起動し([uv](https://docs.astral.sh/uv/) が必要です。モデルは初回起動時に
+Hugging Face からダウンロードされます):
+
+```bash
+uv run https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embedding-server.py
+# リポジトリを clone してあれば: uv run scripts/ruri-embedding-server.py
+```
+
+設定ファイルに空の `embedding` セクションを書くとベクトル検索が有効になります:
 
 ```json
 {
   "history": {
-    "embedding": {
-      "url": "http://localhost:11434/v1/embeddings",
-      "model": "bge-m3"
-    }
+    "embedding": {}
   }
 }
 ```
 
+サーバーは `http://127.0.0.1:8080/v1/embeddings` で `cl-nagoya/ruri-v3-310m` を
+提供します。`--model cl-nagoya/ruri-v3-130m`(または `-70m`、`-30m`)で精度と
+引き換えに軽くでき、`--port` / `--device` も指定できます。モデルを変えたときは
+設定ファイルの `model` も同じものにしてください。ccr は名前に `ruri-v3` を含む
+モデルには Ruri v3 が前提とする `検索クエリ: ` / `検索文書: ` の prefix を自動で
+付けるので、他の方法(GGUF に変換したものを llama.cpp で、Text Embeddings
+Inference で、など)で Ruri v3 を動かしても同じように使えます。
+
+それ以外の OpenAI 互換の embeddings エンドポイント(Ollama、LM Studio、llama.cpp、
+OpenAI、Voyage AI)も使えます:
+
+```json
+{"history": {"embedding": {"url": "http://localhost:11434/v1/embeddings", "model": "bge-m3"}}}
+```
+
 | キー | 意味 |
 | --- | --- |
-| `url`、`model` | エンドポイントとモデル(必須) |
+| `url` | エンドポイント。既定は `http://127.0.0.1:8080/v1/embeddings` |
+| `model` | モデル。既定は `cl-nagoya/ruri-v3-310m` |
 | `api_key_env` | API キーを格納した環境変数名。bearer token として送ります |
 | `dimensions` | 対応するモデルでベクトルの次元を短くする |
-| `query_prefix`、`document_prefix` | クエリ / 保存するテキストの先頭に付ける文字列(e5 の `query: ` / `passage: ` のように、それを前提に学習したモデル向け) |
+| `query_prefix`、`document_prefix` | クエリ / 保存するテキストの先頭に付ける文字列。既定は Ruri v3 なら Ruri v3 のもの、それ以外は無し(e5 なら `query: ` / `passage: `)。`""` で Ruri v3 の既定を無効にできます |
 
 hook は記録するたびにそのメッセージを embedding します。できなかったもの(サーバーが
 止まっていた、後から embedding を設定したなど)は次の `ccr search` で embedding

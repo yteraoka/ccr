@@ -200,10 +200,7 @@ func fakeEmbeddings(t *testing.T) (*embeddingConfig, *int) {
 
 func TestVectorSearch(t *testing.T) {
 	cfg, _ := fakeEmbeddings(t)
-	e, err := newEmbedder(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	e := newEmbedder(cfg)
 	h := newTestHistoryDB(t)
 	ids := addMessages(t, h,
 		historyMessage{sessionID: "s", role: "user", cwd: "/a", text: "aaaa"},
@@ -211,7 +208,7 @@ func TestVectorSearch(t *testing.T) {
 		historyMessage{sessionID: "s", role: "assistant", cwd: "/b", text: "aaab"},
 	)
 
-	if err := h.prepareVectors(e.cfg); err != nil {
+	if err := h.prepareVectors(e.key()); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.embedPending(t.Context(), e, nil); err != nil {
@@ -243,7 +240,7 @@ func TestVectorSearch(t *testing.T) {
 	// a different model invalidates every stored vector
 	other := *cfg
 	other.Model = "other"
-	if err := h.prepareVectors(other); err != nil {
+	if err := h.prepareVectors(newEmbedder(&other).key()); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := h.pendingCount(); n != 3 {
@@ -331,5 +328,58 @@ func TestRunHookKeepsMessageWhenEmbeddingFails(t *testing.T) {
 	defer h.Close() //nolint:errcheck
 	if n, _ := h.pendingCount(); n != 1 {
 		t.Errorf("pendingCount = %d, want the prompt kept for a later search to embed", n)
+	}
+}
+
+func TestNewEmbedderDefaults(t *testing.T) {
+	if newEmbedder(nil) != nil {
+		t.Error("newEmbedder(nil): want vector search off")
+	}
+
+	// an empty section means Ruri v3, with its prefixes
+	e := newEmbedder(&embeddingConfig{})
+	if e.cfg.URL != defaultEmbeddingURL || e.cfg.Model != defaultEmbeddingModel {
+		t.Errorf("defaults = %q %q", e.cfg.URL, e.cfg.Model)
+	}
+	if e.queryPrefix != "検索クエリ: " || e.documentPrefix != "検索文書: " {
+		t.Errorf("Ruri v3 prefixes = %q %q", e.queryPrefix, e.documentPrefix)
+	}
+
+	// any way of naming Ruri v3 gets its prefixes; an explicit "" wins
+	empty := ""
+	e = newEmbedder(&embeddingConfig{Model: "Ruri-v3-30m-Q8_0.gguf", DocumentPrefix: &empty})
+	if e.queryPrefix != "検索クエリ: " || e.documentPrefix != "" {
+		t.Errorf("prefixes = %q %q", e.queryPrefix, e.documentPrefix)
+	}
+
+	// other models get none unless configured
+	query := "query: "
+	e = newEmbedder(&embeddingConfig{Model: "bge-m3", QueryPrefix: &query})
+	if e.queryPrefix != "query: " || e.documentPrefix != "" {
+		t.Errorf("prefixes = %q %q", e.queryPrefix, e.documentPrefix)
+	}
+}
+
+func TestEmbedSendsPrefixes(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		got = append(got, req.Input...)
+		_, _ = w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	defer srv.Close()
+
+	e := newEmbedder(&embeddingConfig{URL: srv.URL})
+	if _, err := e.embedDocuments(t.Context(), []string{"本文"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.embedQuery(t.Context(), "質問"); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"検索文書: 本文", "検索クエリ: 質問"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("sent %q, want %q", got, want)
 	}
 }

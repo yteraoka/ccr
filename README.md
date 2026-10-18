@@ -263,27 +263,48 @@ katakana and case are folded. (The index uses ccr's own tokenizer, so the
 
 ### Vector search
 
-Add an OpenAI-compatible embeddings endpoint to the config file — Ollama,
-LM Studio, llama.cpp, OpenAI and Voyage AI all work. For example, a local
-multilingual model with Ollama (`ollama pull bge-m3`):
+Vector search uses [Ruri v3](https://huggingface.co/collections/cl-nagoya/ruri-v3),
+a Japanese embedding model, by default. Start the bundled server (needs
+[uv](https://docs.astral.sh/uv/); the model is downloaded from Hugging Face
+on first start):
+
+```bash
+uv run https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embedding-server.py
+# or, in a checkout: uv run scripts/ruri-embedding-server.py
+```
+
+and turn vector search on with an empty `embedding` section:
 
 ```json
 {
   "history": {
-    "embedding": {
-      "url": "http://localhost:11434/v1/embeddings",
-      "model": "bge-m3"
-    }
+    "embedding": {}
   }
 }
 ```
 
+The server listens on `http://127.0.0.1:8080/v1/embeddings` and serves
+`cl-nagoya/ruri-v3-310m`; `--model cl-nagoya/ruri-v3-130m` (or `-70m`,
+`-30m`) trades accuracy for speed, and `--port` / `--device` are there too.
+Name the same model in the config if you change it. ccr adds the
+`検索クエリ: ` / `検索文書: ` prefixes Ruri v3 is trained with to every model
+whose name contains `ruri-v3`, so any other server for it (llama.cpp with a
+GGUF conversion, Text Embeddings Inference, ...) works the same way.
+
+Any other OpenAI-compatible embeddings endpoint works as well — Ollama,
+LM Studio, llama.cpp, OpenAI, Voyage AI:
+
+```json
+{"history": {"embedding": {"url": "http://localhost:11434/v1/embeddings", "model": "bge-m3"}}}
+```
+
 | Key | Meaning |
 | --- | --- |
-| `url`, `model` | The endpoint and model (required) |
+| `url` | The endpoint. Default `http://127.0.0.1:8080/v1/embeddings` |
+| `model` | The model. Default `cl-nagoya/ruri-v3-310m` |
 | `api_key_env` | Environment variable holding the API key, sent as a bearer token |
 | `dimensions` | Ask the model for shorter vectors, where it supports it |
-| `query_prefix`, `document_prefix` | Prepended to queries / stored texts, for models trained with them (e5's `query: ` / `passage: `) |
+| `query_prefix`, `document_prefix` | Prepended to queries / stored texts. Default: Ruri v3's for Ruri v3, none otherwise (e5 wants `query: ` / `passage: `); `""` turns the Ruri default off |
 
 The hook embeds each message as it records it; anything it could not
 embed (the server was down, or embedding was configured later) is embedded

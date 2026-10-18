@@ -29,7 +29,8 @@ type historyConfig struct {
 
 // embeddingConfig names an OpenAI-compatible embeddings endpoint
 // (POST {"model", "input"} -> {"data": [{"embedding"}]}), which Ollama,
-// LM Studio, llama.cpp, OpenAI and Voyage AI all serve.
+// LM Studio, llama.cpp, OpenAI and Voyage AI all serve. An empty section
+// means Ruri v3 served locally (see newEmbedder).
 type embeddingConfig struct {
 	URL   string `json:"url"`
 	Model string `json:"model"`
@@ -41,9 +42,10 @@ type embeddingConfig struct {
 	Dimensions int `json:"dimensions"`
 	// QueryPrefix and DocumentPrefix are prepended to search queries and
 	// stored texts, for models trained with them (e5's "query: " and
-	// "passage: ", for instance).
-	QueryPrefix    string `json:"query_prefix"`
-	DocumentPrefix string `json:"document_prefix"`
+	// "passage: ", for instance). Unset, they default to Ruri v3's for a
+	// Ruri v3 model and to nothing otherwise; "" turns that default off.
+	QueryPrefix    *string `json:"query_prefix"`
+	DocumentPrefix *string `json:"document_prefix"`
 }
 
 // ccrConfigPath returns where ccr reads its config file from: $CCR_CONFIG
