@@ -44,12 +44,53 @@ func TestTokenizeJA(t *testing.T) {
 	}
 }
 
+func TestQueryTerms(t *testing.T) {
+	cases := map[string][]string{
+		// particles and auxiliaries go; meaningful words stay
+		"日本語の検索":             {"日本語", "検索"},
+		"全文検索を日本語に対応させたい":    {"全文検索", "日本語", "対応"},
+		"東京都に行きたい":           {"東京都", "行"},
+		"高速な処理":              {"高速", "処理"},
+		"埋め込みモデルを変えたい":       {"埋め込みモデル", "変え"},
+		"再検索できない":            {"再検索"},
+		"sqliteのvec1でベクトル検索": {"sqlite", "vec1", "ベクトル検索"},
+		// no Japanese: words as typed, never analyzed
+		"foo.bar ccr_ja": {"foo.bar", "ccr_ja"},
+		// quotes keep a phrase exactly
+		`"日本語の検索" hook`: {"日本語の検索", "hook"},
+		// nothing but function words: the word itself
+		"これは": {"これは"},
+		"":    nil,
+	}
+	for in, want := range cases {
+		if got := queryTerms(in); !reflect.DeepEqual(got, want) {
+			t.Errorf("queryTerms(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestStem(t *testing.T) {
+	cases := [][3]string{
+		{"変え", "変える", "変え"},
+		{"早く", "早い", "早"},
+		{"書く", "書く", "書"},
+		{"行", "行く", "行"},
+		{"sqlite", "*", "sqlite"},
+	}
+	for _, c := range cases {
+		if got := stem(c[0], c[1]); got != c[2] {
+			t.Errorf("stem(%q, %q) = %q, want %q", c[0], c[1], got, c[2])
+		}
+	}
+}
+
 func TestFTSQuery(t *testing.T) {
 	cases := map[string]string{
-		"検索 Go":     `"検索" "Go"`,
+		"検索 Go":    `"検索" "Go"`,
+		"日本語の検索":   `"日本語" "検索"`,
 		"検":        `"検"*`,
-		`say "hi"`: `"say" """hi"""`,
-		"、 。":       "",
+		`say "hi"`: `"say" "hi"`,
+		"、 。":      "",
 		"":         "",
 	}
 	for in, want := range cases {
@@ -128,7 +169,10 @@ func TestKeywordSearch(t *testing.T) {
 		{"fts5 検索", historyFilter{}, []int64{ids[1]}},
 		{"検索", historyFilter{role: "assistant"}, []int64{ids[1]}},
 		{"検索", historyFilter{cwd: "/b"}, nil},
-		{"検索日本", historyFilter{}, nil}, // not a substring
+		{"検索日本", historyFilter{}, nil},               // not a substring
+		{"日本語の検索", historyFilter{}, []int64{ids[0]}}, // both words, anywhere
+		{"検索を直したい", historyFilter{}, nil},            // 直 is in another message
+		{`"日本語の検索"`, historyFilter{}, nil},           // exactly as quoted
 	}
 	for _, c := range cases {
 		got, err := h.keywordSearch(ftsQuery(c.query), c.f, 10)

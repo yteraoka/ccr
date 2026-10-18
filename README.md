@@ -254,10 +254,20 @@ ccr search -g -role user -l 20 hook   # only your prompts, 20 results
 Each result shows its time, who said it, and the session id (for
 `claude --resume`), with the matching part of the text highlighted.
 
-Keyword search splits the query on spaces; every word must appear. A run
-of Japanese (or other CJK) text is indexed as overlapping two-character
-pieces, so any word of two or more characters is found as a substring,
-and a single character matches too. Full-width letters, half-width
+Keyword search splits the query on spaces; every word must appear.
+Japanese in the query is split into words with the morphological analyzer
+[kagome](https://github.com/ikawaha/kagome) (IPA dictionary), dropping
+particles, auxiliaries and pronouns, so `日本語の検索` finds messages with
+both 日本語 and 検索 anywhere in them. Runs of nouns stay together
+(`全文検索`), and verbs and adjectives are reduced to the part their
+conjugations share (`変えたい` → `変え`). Put a phrase in double quotes to
+search for it exactly as written. Loading kagome's dictionary adds about a
+second to a search with Japanese in it.
+
+Stored text is indexed differently: runs of Japanese (or other CJK) text
+become overlapping two-character pieces, so any word of two or more
+characters is found as a substring — whatever kagome makes of it — and a
+single character matches too. Full-width letters, half-width
 katakana and case are folded. (The index uses ccr's own tokenizer, so the
 `sqlite3` shell can read the database but not query the index.)
 

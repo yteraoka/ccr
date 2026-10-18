@@ -293,11 +293,11 @@ func formatSearchResults(results []historyMessage, query string, showCwd, color 
 	return b.String()
 }
 
-// searchTerms are the query's words, folded the way the index folds text,
-// for snippet to look for.
+// searchTerms are the query's terms (see queryTerms), folded the way the
+// index folds text, for snippet to look for.
 func searchTerms(query string) [][]rune {
 	var terms [][]rune
-	for _, t := range strings.Fields(query) {
+	for _, t := range queryTerms(query) {
 		folded := foldRunes(t)
 		if len(folded) > 0 {
 			terms = append(terms, folded)

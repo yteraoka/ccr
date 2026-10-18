@@ -1,9 +1,7 @@
 package ccr
 
 import (
-	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/ncruces/go-sqlite3/ext/fts5"
 	"golang.org/x/text/width"
@@ -126,29 +124,4 @@ func tokenizeJA(text string, query bool, emit func(token string, start, end int)
 	}
 	runEnd = len(text)
 	return flush()
-}
-
-// ftsQuery turns what a person typed into an FTS5 MATCH expression: every
-// whitespace-separated term must appear (as a phrase, so a Japanese term
-// matches as a substring), and a term that is a single CJK character
-// matches as a prefix (see tokenizeJA). Terms with nothing searchable in
-// them (bare punctuation) are dropped; "" means there is nothing to search.
-func ftsQuery(q string) string {
-	var parts []string
-	for _, term := range strings.Fields(q) {
-		var tokens []string
-		_ = tokenizeJA(term, true, func(token string, _, _ int) error {
-			tokens = append(tokens, token)
-			return nil
-		})
-		if len(tokens) == 0 {
-			continue
-		}
-		part := `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
-		if len(tokens) == 1 && utf8.RuneCountInString(tokens[0]) == 1 && classifyRune([]rune(tokens[0])[0]) == classCJK {
-			part += "*"
-		}
-		parts = append(parts, part)
-	}
-	return strings.Join(parts, " ")
 }
