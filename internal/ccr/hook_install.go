@@ -23,6 +23,7 @@ var historyHookEvents = []string{"UserPromptSubmit", "Stop"}
 const (
 	scopeUser    = "user"
 	scopeProject = "project"
+	scopeLocal   = "local"
 	scopeSystem  = "system"
 )
 
@@ -46,7 +47,7 @@ const systemDropInName = "ccr.json"
 // RunHookCommand implements `ccr hook install|uninstall`.
 func RunHookCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: ccr hook install|uninstall [-scope user|project|system]")
+		return errors.New("usage: ccr hook install|uninstall [-scope user|project|local|system]")
 	}
 	action := args[0]
 	if action != "install" && action != "uninstall" {
@@ -54,12 +55,12 @@ func RunHookCommand(args []string) error {
 	}
 
 	fs := flag.NewFlagSet("ccr hook "+action, flag.ExitOnError)
-	scope := fs.String("scope", scopeUser, "where to write: user ($CLAUDE_CONFIG_DIR/settings.json), project (.claude/settings.json here) or system (managed settings, every user)")
+	scope := fs.String("scope", scopeUser, "where to write: user ($CLAUDE_CONFIG_DIR/settings.json), project (.claude/settings.json here, shared), local (.claude/settings.local.json here, yours only) or system (managed settings, every user)")
 	all := fs.Bool("A", false, "with -scope user, every config directory in the config file")
 	command := fs.String("command", "", `the command to register (default: "ccr hook", or this binary's path if ccr is not on PATH)`)
 	printOnly := fs.Bool("print", false, "print the resulting settings instead of writing them")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: ccr hook %s [-scope user|project|system] [-A] [-print]", action)
+		fmt.Fprintf(os.Stderr, "usage: ccr hook %s [-scope user|project|local|system] [-A] [-print]", action)
 		if action == "install" {
 			fmt.Fprint(os.Stderr, " [-command cmd]")
 		}
@@ -151,18 +152,24 @@ func hookSettingsPaths(scope string, all bool) ([]string, error) {
 			paths[i] = filepath.Join(d, "settings.json")
 		}
 		return paths, nil
-	case scopeProject:
+	case scopeProject, scopeLocal:
 		// Claude Code reads project settings from the directory it is
-		// started in, which is where this is meant to be run
+		// started in, which is where this is meant to be run. The local
+		// file is the one Claude Code keeps out of git: settings for this
+		// project that are not everyone's.
 		cwd, err := os.Getwd()
 		if err != nil {
 			return nil, err
 		}
-		return []string{filepath.Join(cwd, ".claude", "settings.json")}, nil
+		name := "settings.json"
+		if scope == scopeLocal {
+			name = "settings.local.json"
+		}
+		return []string{filepath.Join(cwd, ".claude", name)}, nil
 	case scopeSystem:
 		return []string{filepath.Join(systemSettingsDir(), "managed-settings.d", systemDropInName)}, nil
 	}
-	return nil, fmt.Errorf("-scope must be user, project or system, not %q", scope)
+	return nil, fmt.Errorf("-scope must be user, project, local or system, not %q", scope)
 }
 
 // defaultHookCommand is "ccr hook" when the ccr on PATH is this very

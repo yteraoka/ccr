@@ -185,12 +185,13 @@ q / Esc / Ctrl-C で何も実行せず終了します。
 `transcript_path` の jsonl から、最後に人が入力したプロンプト以降の最後の assistant
 メッセージのテキストを取り出します。それ以外のイベントや空のテキストは何もしません。
 
-`ccr hook install|uninstall [-scope user|project|system] [-A] [-command cmd] [-print]`
+`ccr hook install|uninstall [-scope user|project|local|system] [-A] [-command cmd] [-print]`
 は Claude Code の設定ファイルに上記の hook(`UserPromptSubmit` / `Stop` に
 `{"type": "command", "command": <cmd>, "async": true}`)を追加/削除します
 (`ccr hook` に引数があればこのサブコマンド、無ければ hook 本体として動作します)。
 書き込み先は user = `${CLAUDE_CONFIG_DIR}/settings.json`(`-A` なら設定ファイルの
-全 config ディレクトリ)、project = カレントディレクトリの `.claude/settings.json`、
+全 config ディレクトリ)、project = カレントディレクトリの `.claude/settings.json`、local = カレントディレクトリの
+`.claude/settings.local.json`、
 system = managed settings ディレクトリ(macOS `/Library/Application Support/ClaudeCode`、
 Linux / WSL `/etc/claude-code`、Windows `C:\Program Files\ClaudeCode`)の
 `managed-settings.d/ccr.json`(管理者の `managed-settings.json` は触らない。

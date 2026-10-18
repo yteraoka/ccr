@@ -201,6 +201,7 @@ func TestHookSettingsPaths(t *testing.T) {
 	}{
 		{"user", false, []string{"/cfg/settings.json"}},
 		{"project", false, []string{filepath.Join(cwd, ".claude", "settings.json")}},
+		{"local", false, []string{filepath.Join(cwd, ".claude", "settings.local.json")}},
 		{"system", false, []string{filepath.Join(sys, "managed-settings.d", "ccr.json")}},
 	}
 	for _, c := range cases {
@@ -213,10 +214,12 @@ func TestHookSettingsPaths(t *testing.T) {
 	if got, _ := hookSettingsPaths("user", true); !reflect.DeepEqual(got, []string{"/cfg/settings.json", "/work/settings.json"}) {
 		t.Errorf("-A user paths = %q", got)
 	}
-	if _, err := hookSettingsPaths("project", true); err == nil {
-		t.Error("-A with project scope: want error")
+	for _, scope := range []string{"project", "local", "system"} {
+		if _, err := hookSettingsPaths(scope, true); err == nil {
+			t.Errorf("-A with %s scope: want error", scope)
+		}
 	}
-	if _, err := hookSettingsPaths("local", false); err == nil {
+	if _, err := hookSettingsPaths("managed", false); err == nil {
 		t.Error("unknown scope: want error")
 	}
 }

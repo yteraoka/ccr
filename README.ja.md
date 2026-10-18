@@ -224,13 +224,15 @@ Claude Code の `UserPromptSubmit` と `Stop` の hook に `ccr hook` を登録�
 ccr hook install                  # 自分の全プロジェクト: $CLAUDE_CONFIG_DIR/settings.json
 ccr hook install -A               # 設定ファイルの全 config ディレクトリに
 ccr hook install -scope project   # このプロジェクトの全員: ./.claude/settings.json
+ccr hook install -scope local     # このプロジェクトの自分だけ: ./.claude/settings.local.json
 sudo ccr hook install -scope system   # このマシンの全ユーザー(managed settings)
 ```
 
 | スコープ | 書き込むファイル |
 | --- | --- |
 | `user`(既定) | `$CLAUDE_CONFIG_DIR/settings.json`(`~/.claude/settings.json`) |
-| `project` | カレントディレクトリの `.claude/settings.json` |
+| `project` | カレントディレクトリの `.claude/settings.json`(通常はコミットするので、プロジェクトの全員に効きます) |
+| `local` | カレントディレクトリの `.claude/settings.local.json`(git の管理外なので自分だけ) |
 | `system` | managed settings のディレクトリの `managed-settings.d/ccr.json`: `/Library/Application Support/ClaudeCode`(macOS)、`/etc/claude-code`(Linux、WSL)、`C:\Program Files\ClaudeCode`(Windows) |
 
 設定ファイルの他の部分(他の hook も含む)はそのまま残し、2回実行しても何も

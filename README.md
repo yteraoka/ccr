@@ -225,13 +225,15 @@ Register `ccr hook` for Claude Code's `UserPromptSubmit` and `Stop` hooks:
 ccr hook install                  # you, every project: $CLAUDE_CONFIG_DIR/settings.json
 ccr hook install -A               # ...in every config directory of the config file
 ccr hook install -scope project   # this project, for everyone: ./.claude/settings.json
+ccr hook install -scope local     # this project, just you: ./.claude/settings.local.json
 sudo ccr hook install -scope system   # every user of this machine (managed settings)
 ```
 
 | Scope | File written |
 | --- | --- |
 | `user` (default) | `$CLAUDE_CONFIG_DIR/settings.json` (`~/.claude/settings.json`) |
-| `project` | `.claude/settings.json` in the current directory |
+| `project` | `.claude/settings.json` in the current directory (usually committed, so it applies to everyone working on the project) |
+| `local` | `.claude/settings.local.json` in the current directory (kept out of git: only you) |
 | `system` | `managed-settings.d/ccr.json` in the managed settings directory: `/Library/Application Support/ClaudeCode` (macOS), `/etc/claude-code` (Linux, WSL), `C:\Program Files\ClaudeCode` (Windows) |
 
 The rest of the settings file, other hooks included, is left as it is,
