@@ -105,6 +105,8 @@ cwd のうち `a-zA-Z0-9` 以外の文字をすべて `-` に置換して照合�
 
 - `CLAUDE_CONFIG_DIR` — Claude Code がデータを保存する場所。未設定時は `${HOME}/.claude`。
   [設定ファイル](#設定ファイル)で `-A` 用のディレクトリを追加できます。
+- `CCR_HISTORY_DB` — `ccr hook` が記録し `ccr search` が検索するデータベース
+  ([後述](#過去のプロンプトと回答の検索ccr-search))。
 - `CCR_CONFIG` — ccr の設定ファイルのパス。未設定時は
   `${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json`。
 - `BROWSER` — トランスクリプトビューア(後述)を開くコマンド。一般的な慣習に従い、
@@ -204,6 +206,85 @@ ssh -L 8000:localhost:8000 user@server
 ```
 
 その上で、`ccr` が表示した URL を手元のブラウザで開きます。
+
+## 過去のプロンプトと回答の検索(`ccr search`)
+
+`ccr hook` が送信したプロンプトと Claude の回答をすべて SQLite のデータベースに
+記録し、`ccr search` でそれを検索します。キーワード検索(BM25、日本語対応)に加え、
+embedding モデルを設定すると意味による検索(SQLite の
+[vec1](https://sqlite.org/vec1) 拡張によるベクトル検索)も行い、両者の順位を
+統合して表示します。
+
+### 記録
+
+`~/.claude/settings.json`(複数の config ディレクトリを使っている場合はそれぞれの
+`settings.json`)で `UserPromptSubmit` と `Stop` の hook に `ccr hook` を登録します:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }]
+  }
+}
+```
+
+`async` にしておくと、hook(とその中で行う embedding の問い合わせ)がプロンプトの
+送信を待たせません。データベースは `${XDG_DATA_HOME:-$HOME/.local/share}/ccr/history.db`
+です([設定ファイル](#設定ファイル)の `history.db` か環境変数 `CCR_HISTORY_DB` で
+変更できます)。検索できるのは hook を登録した後に記録されたものだけです。
+
+### 検索
+
+```bash
+ccr search 全文検索                    # カレントディレクトリのセッションから
+ccr search -g sqlite ベクトル          # 全プロジェクトから。すべての語を含むもの
+ccr search -g -role user -l 20 hook   # 自分のプロンプトだけを 20 件
+```
+
+| オプション | 意味 |
+| --- | --- |
+| `-g` | カレントディレクトリで実行したセッションに限らず全プロジェクトを検索 |
+| `-l n` | 表示件数(既定は 10) |
+| `-role user\|assistant` | 自分のプロンプトだけ、または Claude の回答だけ |
+| `-mode hybrid\|keyword\|vector` | embedding モデルを設定していれば `hybrid`、無ければ `keyword` が既定 |
+
+結果には日時、発言者、session id(`claude --resume` に渡せます)と、一致した
+部分を強調した本文の抜粋を表示します。
+
+キーワード検索はクエリを空白で区切り、すべての語を含むものを探します。日本語
+(などの CJK)の文字の並びは2文字ずつずらした bigram で索引を作るので、2文字以上の
+語は部分一致で見つかり、1文字でも検索できます。全角英数字・半角カナ・大文字小文字の
+違いは区別しません(索引は ccr 独自の tokenizer で作るため、`sqlite3` コマンドで
+データベースは読めますが索引の検索はできません)。
+
+### ベクトル検索
+
+設定ファイルに OpenAI 互換の embeddings エンドポイントを追加します。Ollama、
+LM Studio、llama.cpp、OpenAI、Voyage AI のいずれも使えます。例えば Ollama で
+ローカルの多言語モデルを使う場合(`ollama pull bge-m3`):
+
+```json
+{
+  "history": {
+    "embedding": {
+      "url": "http://localhost:11434/v1/embeddings",
+      "model": "bge-m3"
+    }
+  }
+}
+```
+
+| キー | 意味 |
+| --- | --- |
+| `url`、`model` | エンドポイントとモデル(必須) |
+| `api_key_env` | API キーを格納した環境変数名。bearer token として送ります |
+| `dimensions` | 対応するモデルでベクトルの次元を短くする |
+| `query_prefix`、`document_prefix` | クエリ / 保存するテキストの先頭に付ける文字列(e5 の `query: ` / `passage: ` のように、それを前提に学習したモデル向け) |
+
+hook は記録するたびにそのメッセージを embedding します。できなかったもの(サーバーが
+止まっていた、後から embedding を設定したなど)は次の `ccr search` で embedding
+します。モデルを変更するとすべて embedding し直します。
 
 ## 設定ファイル
 

@@ -13,6 +13,37 @@ type fileConfig struct {
 	// ConfigDirs are extra CLAUDE_CONFIG_DIR values to list sessions from,
 	// for people who keep separate Claude Code profiles (work / personal).
 	ConfigDirs []string `json:"config_dirs"`
+	// History configures the prompt/answer history that `ccr hook` records
+	// and `ccr search` searches.
+	History historyConfig `json:"history"`
+}
+
+// historyConfig is the "history" section of the config file.
+type historyConfig struct {
+	// DB is the sqlite database the history lives in; see historyDBPath.
+	DB string `json:"db"`
+	// Embedding turns on vector search. Without it the history is still
+	// recorded and searchable by keyword.
+	Embedding *embeddingConfig `json:"embedding"`
+}
+
+// embeddingConfig names an OpenAI-compatible embeddings endpoint
+// (POST {"model", "input"} -> {"data": [{"embedding"}]}), which Ollama,
+// LM Studio, llama.cpp, OpenAI and Voyage AI all serve.
+type embeddingConfig struct {
+	URL   string `json:"url"`
+	Model string `json:"model"`
+	// APIKeyEnv names the environment variable holding the API key, sent
+	// as a bearer token. Empty for a local server that needs none.
+	APIKeyEnv string `json:"api_key_env"`
+	// Dimensions is passed on as "dimensions" for models that can shorten
+	// their vectors; 0 leaves the model's own size.
+	Dimensions int `json:"dimensions"`
+	// QueryPrefix and DocumentPrefix are prepended to search queries and
+	// stored texts, for models trained with them (e5's "query: " and
+	// "passage: ", for instance).
+	QueryPrefix    string `json:"query_prefix"`
+	DocumentPrefix string `json:"document_prefix"`
 }
 
 // ccrConfigPath returns where ccr reads its config file from: $CCR_CONFIG

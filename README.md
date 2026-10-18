@@ -106,6 +106,7 @@ The terminal splits into two panes:
 ### Environment variables
 
 - `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`. More directories can be added in the [config file](#config-file) for `-A`.
+- `CCR_HISTORY_DB` — the database `ccr hook` records to and `ccr search` searches (see [below](#searching-past-prompts-and-answers-ccr-search)).
 - `CCR_CONFIG` — path of ccr's config file. Defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json`.
 - `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument. If `BROWSER` is unset, macOS falls back to opening the URL with `open`; on other platforms there is nothing to fall back to, so `v` shows the URL instead of opening it.
 - `CCR_NO_BROWSER` — set it to `1` (anything but `0`, `false`, `no`, or `off`) to make `v` show the transcript URL instead of opening a browser, the same as passing `-n`.
@@ -206,6 +207,87 @@ ssh -L 8000:localhost:8000 user@server
 ```
 
 Then open the URL that `ccr` printed, on your own machine.
+
+## Searching past prompts and answers (`ccr search`)
+
+`ccr hook` records every prompt you submit and every answer Claude gives
+in a SQLite database, and `ccr search` finds them again — by keyword
+(BM25, Japanese included) and, once an embedding model is configured, by
+meaning (vector search with SQLite's
+[vec1](https://sqlite.org/vec1) extension), the two rankings fused.
+
+### Recording
+
+Register `ccr hook` for the `UserPromptSubmit` and `Stop` hooks in
+`~/.claude/settings.json` (in each config directory's `settings.json` if
+you use several):
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }]
+  }
+}
+```
+
+`async` keeps the hook (and the embedding request it makes) from delaying
+your prompt. The database is `${XDG_DATA_HOME:-$HOME/.local/share}/ccr/history.db`
+unless `history.db` in the [config file](#config-file) or `CCR_HISTORY_DB`
+says otherwise. Only what is recorded from now on is searchable.
+
+### Searching
+
+```bash
+ccr search 全文検索                    # this directory's sessions
+ccr search -g sqlite ベクトル          # every project; all words must match
+ccr search -g -role user -l 20 hook   # only your prompts, 20 results
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-g` | Search every project, not just sessions run in the current directory |
+| `-l n` | Number of results (default 10) |
+| `-role user\|assistant` | Only your prompts, or only Claude's answers |
+| `-mode hybrid\|keyword\|vector` | Default is `hybrid` with an embedding model, `keyword` without |
+
+Each result shows its time, who said it, and the session id (for
+`claude --resume`), with the matching part of the text highlighted.
+
+Keyword search splits the query on spaces; every word must appear. A run
+of Japanese (or other CJK) text is indexed as overlapping two-character
+pieces, so any word of two or more characters is found as a substring,
+and a single character matches too. Full-width letters, half-width
+katakana and case are folded. (The index uses ccr's own tokenizer, so the
+`sqlite3` shell can read the database but not query the index.)
+
+### Vector search
+
+Add an OpenAI-compatible embeddings endpoint to the config file — Ollama,
+LM Studio, llama.cpp, OpenAI and Voyage AI all work. For example, a local
+multilingual model with Ollama (`ollama pull bge-m3`):
+
+```json
+{
+  "history": {
+    "embedding": {
+      "url": "http://localhost:11434/v1/embeddings",
+      "model": "bge-m3"
+    }
+  }
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `url`, `model` | The endpoint and model (required) |
+| `api_key_env` | Environment variable holding the API key, sent as a bearer token |
+| `dimensions` | Ask the model for shorter vectors, where it supports it |
+| `query_prefix`, `document_prefix` | Prepended to queries / stored texts, for models trained with them (e5's `query: ` / `passage: `) |
+
+The hook embeds each message as it records it; anything it could not
+embed (the server was down, or embedding was configured later) is embedded
+by the next `ccr search`. Changing the model re-embeds everything.
 
 ## Config file
 
