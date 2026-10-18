@@ -63,9 +63,10 @@ var lightVerbs = map[string]bool{"する": true, "できる": true, "ある": tr
 // words. Particles, auxiliaries, pronouns and the like are dropped; runs of
 // nouns (and prefixes) stay together as one term, so 全文検索 or 東京都 is
 // still looked for as a whole. A verb or adjective becomes its stem (変えたい
-// → 変え, 書く → 書), the part every conjugation of it shares, except where
-// it is the first half of a compound noun (埋め込みモデル). If nothing is
-// left, or kagome cannot be loaded, word itself is the term.
+// → 変え), the part every conjugation of it shares, except where it is the
+// first half of a compound noun (埋め込みモデル); one whose stem is a single
+// character (行きたい → 行) is dropped, as that would match far too much. If
+// nothing is left, or kagome cannot be loaded, word itself is the term.
 func contentTerms(word string) []string {
 	t, err := queryAnalyzer()
 	if err != nil {
@@ -92,7 +93,9 @@ func contentTerms(word string) []string {
 				continue
 			}
 			flush()
-			terms = append(terms, stem(tok.Surface, feature(f, 6)))
+			if s := stem(tok.Surface, feature(f, 6)); utf8.RuneCountInString(s) > 1 {
+				terms = append(terms, s)
+			}
 		default:
 			flush()
 		}

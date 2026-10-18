@@ -260,7 +260,8 @@ Japanese in the query is split into words with the morphological analyzer
 particles, auxiliaries and pronouns, so `日本語の検索` finds messages with
 both 日本語 and 検索 anywhere in them. Runs of nouns stay together
 (`全文検索`), and verbs and adjectives are reduced to the part their
-conjugations share (`変えたい` → `変え`). Put a phrase in double quotes to
+conjugations share (`変えたい` → `変え`), and left out when that is a single
+character (`行きたい` → `行`), which would match far too much. Put a phrase in double quotes to
 search for it exactly as written. Loading kagome's dictionary adds about a
 second to a search with Japanese in it.
 

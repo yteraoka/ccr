@@ -49,7 +49,8 @@ func TestQueryTerms(t *testing.T) {
 		// particles and auxiliaries go; meaningful words stay
 		"日本語の検索":             {"日本語", "検索"},
 		"全文検索を日本語に対応させたい":    {"全文検索", "日本語", "対応"},
-		"東京都に行きたい":           {"東京都", "行"},
+		"東京都に行きたい":           {"東京都"}, // 行 alone would match too much
+		"テストを書く":             {"テスト"},
 		"高速な処理":              {"高速", "処理"},
 		"埋め込みモデルを変えたい":       {"埋め込みモデル", "変え"},
 		"再検索できない":            {"再検索"},
@@ -58,9 +59,10 @@ func TestQueryTerms(t *testing.T) {
 		"foo.bar ccr_ja": {"foo.bar", "ccr_ja"},
 		// quotes keep a phrase exactly
 		`"日本語の検索" hook`: {"日本語の検索", "hook"},
-		// nothing but function words: the word itself
-		"これは": {"これは"},
-		"":    nil,
+		// nothing left: the word itself
+		"これは":  {"これは"},
+		"行きたい": {"行きたい"},
+		"":     nil,
 	}
 	for in, want := range cases {
 		if got := queryTerms(in); !reflect.DeepEqual(got, want) {
@@ -169,10 +171,11 @@ func TestKeywordSearch(t *testing.T) {
 		{"fts5 検索", historyFilter{}, []int64{ids[1]}},
 		{"検索", historyFilter{role: "assistant"}, []int64{ids[1]}},
 		{"検索", historyFilter{cwd: "/b"}, nil},
-		{"検索日本", historyFilter{}, nil},               // not a substring
-		{"日本語の検索", historyFilter{}, []int64{ids[0]}}, // both words, anywhere
-		{"検索を直したい", historyFilter{}, nil},            // 直 is in another message
-		{`"日本語の検索"`, historyFilter{}, nil},           // exactly as quoted
+		{"検索日本", historyFilter{}, nil},                        // not a substring
+		{"日本語の検索", historyFilter{}, []int64{ids[0]}},          // both words, anywhere
+		{"検索を直したい", historyFilter{}, []int64{ids[0], ids[1]}}, // 直 is too short to count
+		{"検索を変えたい", historyFilter{}, nil},                     // no message has 変え
+		{`"日本語の検索"`, historyFilter{}, nil},                    // exactly as quoted
 	}
 	for _, c := range cases {
 		got, err := h.keywordSearch(ftsQuery(c.query), c.f, 10)
