@@ -276,6 +276,15 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
   `s` / `/` でクエリを編集して再検索、q / Esc で picker に戻ります(画面は保持され、
   再度 `s` で前回の結果とクエリに戻ります)。入力中の Esc は、結果があれば編集を
   やめるだけ、まだ検索していなければ picker に戻ります。
+- セッションの transcript が削除されていても(記録された config ディレクトリも含めて
+  見つからない場合)、HTTP サーバーは `/<session_id>` に対して履歴 DB にそのセッションの
+  メッセージがあれば、それを時刻順に(同時刻は id 順)user / assistant の card として
+  通常と同じページで表示し、ヘッダーの下に transcript が無いこと・記録された件数・
+  tool 呼び出しなどは含まないことを注記します(`{ }` ボタンは出さず、`/raw` と
+  sub agent は 404。履歴 DB のファイルが無ければ作らずに 404)。履歴検索の画面では
+  プレビューに `Transcript: gone (v shows what the history kept)` を出し、Enter
+  (claude は transcript 無しに resume できない)と `i` はステータスにその旨を出して
+  何もしません。
 
 ## 設定ファイル
 

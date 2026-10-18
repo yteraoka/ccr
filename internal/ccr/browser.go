@@ -90,6 +90,19 @@ func handleTranscriptRequest(w http.ResponseWriter, r *http.Request) {
 
 	path, err := lookupSessionFile(sessionID)
 	if err != nil {
+		// the transcript is gone, but the history may have kept the
+		// conversation itself
+		if agentID == "" && !raw {
+			page, herr := buildHistorySessionHTML(sessionID)
+			if herr == nil {
+				writeHTML(w, page)
+				return
+			}
+			if !errors.Is(herr, errNoHistory) {
+				http.Error(w, herr.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}

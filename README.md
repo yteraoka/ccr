@@ -318,6 +318,13 @@ It searches the current directory's messages, or every project's under
 `ccr -g`, with the default mode (`hybrid` when an embedding model is
 configured).
 
+The history outlives the transcripts: when a session's jsonl has been
+deleted, the preview says `Transcript: gone`, and `v` still shows the
+conversation, rebuilt from what the history recorded — each prompt and
+Claude's final answer to it, without the tool calls — under a note saying
+so. Such a session cannot be resumed (`Enter`) or inspected (`i`), as
+both need the transcript itself.
+
 Keyword search splits the query on spaces; every word must appear.
 Japanese in the query is split into words with the morphological analyzer
 [kagome](https://github.com/ikawaha/kagome) (IPA dictionary), dropping
