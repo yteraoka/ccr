@@ -157,7 +157,8 @@ HTTP サーバーが、リクエストパスの session id (`/<session_id>`)ご�
 レンダリングして返します(`v` を押すたびに新しいサーバーを起動するのではなく、
 初回押下時に起動した1つのサーバーを使い回します。サーバーは ccr プロセスが
 終了するまで動作し続けます)。picker は終了せず、エラーが起きた場合のみ一覧の下に
-1行のステータスとして表示されます。q / Esc / Ctrl-C で何も実行せず終了します。
+1行のステータスとして表示されます。`s` で後述の履歴検索の画面を開きます(下記)。
+q / Esc / Ctrl-C で何も実行せず終了します。
 
 対象セッションの範囲:
 
@@ -174,6 +175,70 @@ HTTP サーバーが、リクエストパスの session id (`/<session_id>`)ご�
   現在の `${CLAUDE_CONFIG_DIR}` のみを対象にします。
 - `-n` / `-no-browser`: `v` でブラウザを開かず URL の表示だけを行います
   (環境変数 `CCR_NO_BROWSER` でも同じ設定ができます)。
+
+## プロンプトと回答の履歴検索
+
+`ccr hook` を Claude Code の `UserPromptSubmit` / `Stop` hook に登録すると
+(`"async": true` を推奨)、標準入力の hook JSON から、`UserPromptSubmit` では
+`prompt` を role = user、`Stop` では `last_assistant_message` を role = assistant
+として SQLite に記録します。`last_assistant_message` が無い古い Claude Code では
+`transcript_path` の jsonl から、最後に人が入力したプロンプト以降の最後の assistant
+メッセージのテキストを取り出します。それ以外のイベントや空のテキストは何もしません。
+UserPromptSubmit の stdout は会話に追加されるため、hook は stdout に何も書きません。
+
+- データベース: `CCR_HISTORY_DB`、設定ファイルの `history.db`、
+  `${XDG_DATA_HOME:-$HOME/.local/share}/ccr/history.db` の順に決めます。
+  CGO なしでビルドするため SQLite は `github.com/ncruces/go-sqlite3` を使い、
+  WAL と busy_timeout で複数セッションの hook の同時書き込みに耐えます。
+- `messages` テーブルに session id / role / text / cwd / `CLAUDE_CONFIG_DIR` /
+  記録時刻を保存し、FTS5 の external content テーブル `messages_fts` で索引します。
+  tokenizer は独自の `ccr_ja`: CJK(漢字・ひらがな・カタカナ・ハングルと `ー`
+  など)の連続は重なりのある bigram と(文書側のみ)末尾の1文字、それ以外の
+  文字・数字の連続は1語とし、全角英数字→半角、半角カナ→全角、小文字化で正規化します。
+- 設定ファイルの `history.embedding`(OpenAI 互換の `/v1/embeddings`:
+  `url` / `model` / `api_key_env` / `dimensions` / `query_prefix` /
+  `document_prefix`)があればベクトル検索を有効にします。既定のモデルは Ruri v3
+  (`url` 省略時 `http://127.0.0.1:8080/v1/embeddings`、`model` 省略時
+  `cl-nagoya/ruri-v3-310m`)で、`scripts/ruri-embedding-server.py`(uv で実行する
+  sentence-transformers のサーバー、prefix は付けない)がその既定に合わせて listen
+  します。名前に `ruri-v3` を含むモデルには、`query_prefix` / `document_prefix` が
+  未指定なら `検索クエリ: ` / `検索文書: ` を付けます(`""` を指定すれば付けません)。vec1 の仮想テーブル
+  `messages_vec`(flat index、cos 距離、最初のベクトルで次元が決まるため初回保存時に
+  作成)に rowid = messages.id で保存します。hook は記録直後にそのメッセージを
+  embedding し、失敗したもの・未処理のものは `ccr search` が検索前にまとめて
+  embedding します。モデル(url / model / dimensions / document_prefix)が
+  変わったら `messages_vec` を作り直して全件 embedding し直します。
+- `ccr search [-g] [-l n] [-role user|assistant] [-mode hybrid|keyword|vector] <query>`:
+  既定はカレントディレクトリを cwd とする記録のみ(`-g` で全件)。keyword はクエリを
+  空白で区切り、CJK を含む語は kagome(IPA 辞書、日本語を含むクエリのときだけ
+  読み込む)で形態素解析して内容語を取り出します: 助詞・助動詞・代名詞・非自立名詞・
+  軽動詞(する / できる / ある / いる / なる / おる)は捨て、名詞(と接頭詞、名詞に
+  続く連用形の動詞)の連続は1語につなぎ、それ以外の動詞・形容詞は表層形と原形の
+  共通部分(原形のままなら最後の1文字を除く)にし、それが1文字になるものは除外します。何も残らなければ元の語を
+  使い、ダブルクォートで囲んだ部分は解析せずそのまま1語にします。各語をフレーズとして
+  AND 検索し(1文字の CJK 語は前方一致)、bm25 順。vector は vec1 の近傍順(絞り込みがある場合は多めに取ってから絞る)。
+  hybrid(embedding 設定時の既定)は両者を RRF (k = 60) で統合します。
+  embedding が失敗した場合 hybrid は警告を出して keyword のみで続けます。
+  結果は日時・発言者・session id(`-g` 時は cwd の basename)の行と、最初の一致
+  箇所を中心にした 160 文字の抜粋(端末なら一致部分を強調)を表示します。
+
+### picker からの履歴検索(`s`)
+
+- picker で `s` を押すと最下部が `search history: <query>▏` のプロンプトになり、
+  Enter で検索します(kagome の読み込みや embedding に時間がかかるため、入力ごとの
+  インクリメンタル検索ではなく Enter で実行し、検索はバックグラウンドで行って
+  `searching…` を表示します)。対象は picker と同じくカレントディレクトリ
+  (`-g` なら全件)、モードは `ccr search` の既定、最大 100 件です。
+- 画面は上(約 2/5)に `TIME / WHO / CWD / MESSAGE` の結果一覧(一致箇所を中心にした
+  抜粋、一致部分を強調)と legend 行、下にカーソル位置のメッセージの session id・
+  cwd・日時・発言者と全文(幅で折り返し、長い場合は最初の一致の1行前から表示)、
+  最下部に `<n> results for "<query>" (<mode>)` などのステータスを表示します。
+- 移動キーは picker と同じ。Enter でそのメッセージの session を、記録された cwd と
+  `CLAUDE_CONFIG_DIR` で resume。`i` / `v` はそのセッションの jsonl / HTML を開きます
+  (記録された config ディレクトリも session ファイルの探索対象に加えます)。
+  `s` / `/` でクエリを編集して再検索、q / Esc で picker に戻ります(画面は保持され、
+  再度 `s` で前回の結果とクエリに戻ります)。入力中の Esc は、結果があれば編集を
+  やめるだけ、まだ検索していなければ picker に戻ります。
 
 ## 設定ファイル
 

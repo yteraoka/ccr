@@ -96,6 +96,7 @@ cwd のうち `a-zA-Z0-9` 以外の文字をすべて `-` に置換して照合�
 | `Space`/`PageDown`、`b`/`Backspace`/`PageUp` | 1画面送り / 戻し |
 | `g`、`G` | 先頭 / 末尾のセッションへ |
 | `/` | 入力に応じて一覧を絞り込み(session id と cwd が対象)|
+| `s` | 過去のプロンプトと回答を検索([後述](#picker-での検索s-キー))|
 | `Enter` | 選択したセッションを resume(`cd` してから `exec claude --resume <id>`) |
 | `i` | 選択したセッションの生の `jsonl` をターミナル内で確認 |
 | `v` | 選択したセッションの全文をブラウザで表示(後述) |
@@ -105,6 +106,8 @@ cwd のうち `a-zA-Z0-9` 以外の文字をすべて `-` に置換して照合�
 
 - `CLAUDE_CONFIG_DIR` — Claude Code がデータを保存する場所。未設定時は `${HOME}/.claude`。
   [設定ファイル](#設定ファイル)で `-A` 用のディレクトリを追加できます。
+- `CCR_HISTORY_DB` — `ccr hook` が記録し `ccr search` が検索するデータベース
+  ([後述](#過去のプロンプトと回答の検索ccr-search))。
 - `CCR_CONFIG` — ccr の設定ファイルのパス。未設定時は
   `${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json`。
 - `BROWSER` — トランスクリプトビューア(後述)を開くコマンド。一般的な慣習に従い、
@@ -204,6 +207,132 @@ ssh -L 8000:localhost:8000 user@server
 ```
 
 その上で、`ccr` が表示した URL を手元のブラウザで開きます。
+
+## 過去のプロンプトと回答の検索(`ccr search`)
+
+`ccr hook` が送信したプロンプトと Claude の回答をすべて SQLite のデータベースに
+記録し、`ccr search` でそれを検索します。キーワード検索(BM25、日本語対応)に加え、
+embedding モデルを設定すると意味による検索(SQLite の
+[vec1](https://sqlite.org/vec1) 拡張によるベクトル検索)も行い、両者の順位を
+統合して表示します。
+
+### 記録
+
+`~/.claude/settings.json`(複数の config ディレクトリを使っている場合はそれぞれの
+`settings.json`)で `UserPromptSubmit` と `Stop` の hook に `ccr hook` を登録します:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }]
+  }
+}
+```
+
+`async` にしておくと、hook(とその中で行う embedding の問い合わせ)がプロンプトの
+送信を待たせません。データベースは `${XDG_DATA_HOME:-$HOME/.local/share}/ccr/history.db`
+です([設定ファイル](#設定ファイル)の `history.db` か環境変数 `CCR_HISTORY_DB` で
+変更できます)。検索できるのは hook を登録した後に記録されたものだけです。
+
+### 検索
+
+```bash
+ccr search 全文検索                    # カレントディレクトリのセッションから
+ccr search -g sqlite ベクトル          # 全プロジェクトから。すべての語を含むもの
+ccr search -g -role user -l 20 hook   # 自分のプロンプトだけを 20 件
+```
+
+| オプション | 意味 |
+| --- | --- |
+| `-g` | カレントディレクトリで実行したセッションに限らず全プロジェクトを検索 |
+| `-l n` | 表示件数(既定は 10) |
+| `-role user\|assistant` | 自分のプロンプトだけ、または Claude の回答だけ |
+| `-mode hybrid\|keyword\|vector` | embedding モデルを設定していれば `hybrid`、無ければ `keyword` が既定 |
+
+結果には日時、発言者、session id(`claude --resume` に渡せます)と、一致した
+部分を強調した本文の抜粋を表示します。
+
+### picker での検索(`s` キー)
+
+セッション一覧で `s` を押し、クエリを入力して `Enter` で検索します。結果は一致した
+部分を強調して一覧表示し、カーソル位置のメッセージの全文を一覧の下に(一致箇所まで
+スクロールして)表示します。結果の上では:
+
+| キー | 動作 |
+| --- | --- |
+| `↑`/`↓`、`j`/`k`、`n`/`p`、`Space`/`b`、`g`/`G` | セッション一覧と同じ移動 |
+| `Enter` | そのメッセージのセッションを resume |
+| `i` / `v` | そのセッションの `jsonl` / 全文をセッション一覧と同じように表示 |
+| `s`、`/` | クエリを編集して再検索 |
+| `q`、`Esc` | セッション一覧に戻る(`s` で前回の検索結果に戻れます) |
+
+対象はカレントディレクトリで記録したメッセージ(`ccr -g` なら全プロジェクト)、
+検索モードは既定(embedding モデルを設定していれば `hybrid`)です。
+
+キーワード検索はクエリを空白で区切り、すべての語を含むものを探します。クエリ中の
+日本語は形態素解析器 [kagome](https://github.com/ikawaha/kagome)(IPA 辞書)で
+単語に分け、助詞・助動詞・代名詞などを除くので、`日本語の検索` は「日本語」と
+「検索」を両方含むメッセージを見つけます。名詞の連続は1語のまま(`全文検索`)、
+動詞・形容詞は活用しても変わらない部分(`変えたい` → `変え`)にします(それが
+1文字になるもの(`行きたい` → `行`)は一致する範囲が広すぎるので除きます)。書いたとおりの
+並びで探したいときはダブルクォートで囲んでください。日本語を含む検索では kagome の
+辞書の読み込みに1秒ほどかかります。
+
+保存するテキストの索引は別の方法で作ります。日本語(などの CJK)の文字の並びは
+2文字ずつずらした bigram にするので、2文字以上の語は(kagome がどう区切るかに
+関わらず)部分一致で見つかり、1文字でも検索できます。全角英数字・半角カナ・大文字小文字の
+違いは区別しません(索引は ccr 独自の tokenizer で作るため、`sqlite3` コマンドで
+データベースは読めますが索引の検索はできません)。
+
+### ベクトル検索
+
+ベクトル検索の既定のモデルは日本語の embedding モデル
+[Ruri v3](https://huggingface.co/collections/cl-nagoya/ruri-v3) です。付属の
+サーバーを起動し([uv](https://docs.astral.sh/uv/) が必要です。モデルは初回起動時に
+Hugging Face からダウンロードされます):
+
+```bash
+uv run https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embedding-server.py
+# リポジトリを clone してあれば: uv run scripts/ruri-embedding-server.py
+```
+
+設定ファイルに空の `embedding` セクションを書くとベクトル検索が有効になります:
+
+```json
+{
+  "history": {
+    "embedding": {}
+  }
+}
+```
+
+サーバーは `http://127.0.0.1:8080/v1/embeddings` で `cl-nagoya/ruri-v3-310m` を
+提供します。`--model cl-nagoya/ruri-v3-130m`(または `-70m`、`-30m`)で精度と
+引き換えに軽くでき、`--port` / `--device` も指定できます。モデルを変えたときは
+設定ファイルの `model` も同じものにしてください。ccr は名前に `ruri-v3` を含む
+モデルには Ruri v3 が前提とする `検索クエリ: ` / `検索文書: ` の prefix を自動で
+付けるので、他の方法(GGUF に変換したものを llama.cpp で、Text Embeddings
+Inference で、など)で Ruri v3 を動かしても同じように使えます。
+
+それ以外の OpenAI 互換の embeddings エンドポイント(Ollama、LM Studio、llama.cpp、
+OpenAI、Voyage AI)も使えます:
+
+```json
+{"history": {"embedding": {"url": "http://localhost:11434/v1/embeddings", "model": "bge-m3"}}}
+```
+
+| キー | 意味 |
+| --- | --- |
+| `url` | エンドポイント。既定は `http://127.0.0.1:8080/v1/embeddings` |
+| `model` | モデル。既定は `cl-nagoya/ruri-v3-310m` |
+| `api_key_env` | API キーを格納した環境変数名。bearer token として送ります |
+| `dimensions` | 対応するモデルでベクトルの次元を短くする |
+| `query_prefix`、`document_prefix` | クエリ / 保存するテキストの先頭に付ける文字列。既定は Ruri v3 なら Ruri v3 のもの、それ以外は無し(e5 なら `query: ` / `passage: `)。`""` で Ruri v3 の既定を無効にできます |
+
+hook は記録するたびにそのメッセージを embedding します。できなかったもの(サーバーが
+止まっていた、後から embedding を設定したなど)は次の `ccr search` で embedding
+します。モデルを変更するとすべて embedding し直します。
 
 ## 設定ファイル
 

@@ -98,6 +98,7 @@ The terminal splits into two panes:
 | `Space`/`PageDown`, `b`/`Backspace`/`PageUp` | Page through the list |
 | `g`, `G` | Jump to the first or last session |
 | `/` | Filter the list as you type (id and directory) |
+| `s` | Search past prompts and answers (see [below](#in-the-picker-s)) |
 | `Enter` | Resume the selected session (`cd` + `exec claude --resume <id>`) |
 | `i` | Inspect the selected session's raw `jsonl` without leaving the terminal |
 | `v` | View the full transcript of the selected session in your browser (see below) |
@@ -106,6 +107,7 @@ The terminal splits into two panes:
 ### Environment variables
 
 - `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`. More directories can be added in the [config file](#config-file) for `-A`.
+- `CCR_HISTORY_DB` — the database `ccr hook` records to and `ccr search` searches (see [below](#searching-past-prompts-and-answers-ccr-search)).
 - `CCR_CONFIG` — path of ccr's config file. Defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json`.
 - `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument. If `BROWSER` is unset, macOS falls back to opening the URL with `open`; on other platforms there is nothing to fall back to, so `v` shows the URL instead of opening it.
 - `CCR_NO_BROWSER` — set it to `1` (anything but `0`, `false`, `no`, or `off`) to make `v` show the transcript URL instead of opening a browser, the same as passing `-n`.
@@ -206,6 +208,138 @@ ssh -L 8000:localhost:8000 user@server
 ```
 
 Then open the URL that `ccr` printed, on your own machine.
+
+## Searching past prompts and answers (`ccr search`)
+
+`ccr hook` records every prompt you submit and every answer Claude gives
+in a SQLite database, and `ccr search` finds them again — by keyword
+(BM25, Japanese included) and, once an embedding model is configured, by
+meaning (vector search with SQLite's
+[vec1](https://sqlite.org/vec1) extension), the two rankings fused.
+
+### Recording
+
+Register `ccr hook` for the `UserPromptSubmit` and `Stop` hooks in
+`~/.claude/settings.json` (in each config directory's `settings.json` if
+you use several):
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "ccr hook", "async": true }] }]
+  }
+}
+```
+
+`async` keeps the hook (and the embedding request it makes) from delaying
+your prompt. The database is `${XDG_DATA_HOME:-$HOME/.local/share}/ccr/history.db`
+unless `history.db` in the [config file](#config-file) or `CCR_HISTORY_DB`
+says otherwise. Only what is recorded from now on is searchable.
+
+### Searching
+
+```bash
+ccr search 全文検索                    # this directory's sessions
+ccr search -g sqlite ベクトル          # every project; all words must match
+ccr search -g -role user -l 20 hook   # only your prompts, 20 results
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-g` | Search every project, not just sessions run in the current directory |
+| `-l n` | Number of results (default 10) |
+| `-role user\|assistant` | Only your prompts, or only Claude's answers |
+| `-mode hybrid\|keyword\|vector` | Default is `hybrid` with an embedding model, `keyword` without |
+
+Each result shows its time, who said it, and the session id (for
+`claude --resume`), with the matching part of the text highlighted.
+
+### In the picker (`s`)
+
+Press `s` in the session list, type the query and press `Enter`. The
+results are listed with the matching part highlighted, and the message
+under the cursor is shown in full below the list, scrolled to where it
+matches. From a result:
+
+| Key | Action |
+| --- | --- |
+| `↑`/`↓`, `j`/`k`, `n`/`p`, `Space`/`b`, `g`/`G` | Move, as in the session list |
+| `Enter` | Resume the session the message is from |
+| `i` / `v` | Open that session's `jsonl` / transcript, as in the session list |
+| `s`, `/` | Edit the query and search again |
+| `q`, `Esc` | Back to the session list (`s` brings the last search back) |
+
+It searches the current directory's messages, or every project's under
+`ccr -g`, with the default mode (`hybrid` when an embedding model is
+configured).
+
+Keyword search splits the query on spaces; every word must appear.
+Japanese in the query is split into words with the morphological analyzer
+[kagome](https://github.com/ikawaha/kagome) (IPA dictionary), dropping
+particles, auxiliaries and pronouns, so `日本語の検索` finds messages with
+both 日本語 and 検索 anywhere in them. Runs of nouns stay together
+(`全文検索`), and verbs and adjectives are reduced to the part their
+conjugations share (`変えたい` → `変え`), and left out when that is a single
+character (`行きたい` → `行`), which would match far too much. Put a phrase in double quotes to
+search for it exactly as written. Loading kagome's dictionary adds about a
+second to a search with Japanese in it.
+
+Stored text is indexed differently: runs of Japanese (or other CJK) text
+become overlapping two-character pieces, so any word of two or more
+characters is found as a substring — whatever kagome makes of it — and a
+single character matches too. Full-width letters, half-width
+katakana and case are folded. (The index uses ccr's own tokenizer, so the
+`sqlite3` shell can read the database but not query the index.)
+
+### Vector search
+
+Vector search uses [Ruri v3](https://huggingface.co/collections/cl-nagoya/ruri-v3),
+a Japanese embedding model, by default. Start the bundled server (needs
+[uv](https://docs.astral.sh/uv/); the model is downloaded from Hugging Face
+on first start):
+
+```bash
+uv run https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embedding-server.py
+# or, in a checkout: uv run scripts/ruri-embedding-server.py
+```
+
+and turn vector search on with an empty `embedding` section:
+
+```json
+{
+  "history": {
+    "embedding": {}
+  }
+}
+```
+
+The server listens on `http://127.0.0.1:8080/v1/embeddings` and serves
+`cl-nagoya/ruri-v3-310m`; `--model cl-nagoya/ruri-v3-130m` (or `-70m`,
+`-30m`) trades accuracy for speed, and `--port` / `--device` are there too.
+Name the same model in the config if you change it. ccr adds the
+`検索クエリ: ` / `検索文書: ` prefixes Ruri v3 is trained with to every model
+whose name contains `ruri-v3`, so any other server for it (llama.cpp with a
+GGUF conversion, Text Embeddings Inference, ...) works the same way.
+
+Any other OpenAI-compatible embeddings endpoint works as well — Ollama,
+LM Studio, llama.cpp, OpenAI, Voyage AI:
+
+```json
+{"history": {"embedding": {"url": "http://localhost:11434/v1/embeddings", "model": "bge-m3"}}}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `url` | The endpoint. Default `http://127.0.0.1:8080/v1/embeddings` |
+| `model` | The model. Default `cl-nagoya/ruri-v3-310m` |
+| `api_key_env` | Environment variable holding the API key, sent as a bearer token |
+| `dimensions` | Ask the model for shorter vectors, where it supports it |
+| `query_prefix`, `document_prefix` | Prepended to queries / stored texts. Default: Ruri v3's for Ruri v3, none otherwise (e5 wants `query: ` / `passage: `); `""` turns the Ruri default off |
+
+The hook embeds each message as it records it; anything it could not
+embed (the server was down, or embedding was configured later) is embedded
+by the next `ccr search`. Changing the model re-embeds everything.
 
 ## Config file
 

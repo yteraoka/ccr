@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 )
 
 // fileConfig is the content of ccr's own config file.
@@ -13,6 +15,39 @@ type fileConfig struct {
 	// ConfigDirs are extra CLAUDE_CONFIG_DIR values to list sessions from,
 	// for people who keep separate Claude Code profiles (work / personal).
 	ConfigDirs []string `json:"config_dirs"`
+	// History configures the prompt/answer history that `ccr hook` records
+	// and `ccr search` searches.
+	History historyConfig `json:"history"`
+}
+
+// historyConfig is the "history" section of the config file.
+type historyConfig struct {
+	// DB is the sqlite database the history lives in; see historyDBPath.
+	DB string `json:"db"`
+	// Embedding turns on vector search. Without it the history is still
+	// recorded and searchable by keyword.
+	Embedding *embeddingConfig `json:"embedding"`
+}
+
+// embeddingConfig names an OpenAI-compatible embeddings endpoint
+// (POST {"model", "input"} -> {"data": [{"embedding"}]}), which Ollama,
+// LM Studio, llama.cpp, OpenAI and Voyage AI all serve. An empty section
+// means Ruri v3 served locally (see newEmbedder).
+type embeddingConfig struct {
+	URL   string `json:"url"`
+	Model string `json:"model"`
+	// APIKeyEnv names the environment variable holding the API key, sent
+	// as a bearer token. Empty for a local server that needs none.
+	APIKeyEnv string `json:"api_key_env"`
+	// Dimensions is passed on as "dimensions" for models that can shorten
+	// their vectors; 0 leaves the model's own size.
+	Dimensions int `json:"dimensions"`
+	// QueryPrefix and DocumentPrefix are prepended to search queries and
+	// stored texts, for models trained with them (e5's "query: " and
+	// "passage: ", for instance). Unset, they default to Ruri v3's for a
+	// Ruri v3 model and to nothing otherwise; "" turns that default off.
+	QueryPrefix    *string `json:"query_prefix"`
+	DocumentPrefix *string `json:"document_prefix"`
 }
 
 // ccrConfigPath returns where ccr reads its config file from: $CCR_CONFIG
@@ -107,13 +142,38 @@ func configDirs() ([]string, error) {
 // directory of the config file, not just the current one.
 var useAllConfigDirs bool
 
+// knownConfigDirs are config directories sessions have been seen in
+// outside the ones being listed: the history search finds messages from
+// any of them, and its i and v must still reach those sessions' files. It
+// is read by the transcript server's goroutines, hence the lock.
+var knownConfigDirs struct {
+	sync.Mutex
+	dirs []string
+}
+
+// rememberConfigDir adds dir to the directories lookupSessionFile searches.
+func rememberConfigDir(dir string) {
+	if dir == "" {
+		return
+	}
+	knownConfigDirs.Lock()
+	defer knownConfigDirs.Unlock()
+	if !slices.Contains(knownConfigDirs.dirs, dir) {
+		knownConfigDirs.dirs = append(knownConfigDirs.dirs, dir)
+	}
+}
+
 // lookupSessionFile finds sessionID's jsonl in the current config
-// directory, or with -A in any of them, the first one holding it winning.
+// directory (with -A, in any of them; then in any rememberConfigDir added),
+// the first one holding it winning.
 func lookupSessionFile(sessionID string) (string, error) {
 	dirs := []string{configDir()}
 	if useAllConfigDirs {
 		dirs, _ = configDirs()
 	}
+	knownConfigDirs.Lock()
+	dirs = append(dirs, knownConfigDirs.dirs...)
+	knownConfigDirs.Unlock()
 	for _, dir := range dirs {
 		if path, err := findSessionFile(filepath.Join(dir, "projects"), sessionID); err == nil {
 			return path, nil
