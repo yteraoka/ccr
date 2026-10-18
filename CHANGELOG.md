@@ -1,5 +1,10 @@
 # Changelog
 
+## [v3.1.0](https://github.com/yteraoka/ccr/compare/v3.0.0...v3.1.0) - 2026-10-18
+
+- Add a script to run the Ruri v3 embedding server as a service by @yteraoka in https://github.com/yteraoka/ccr/pull/102
+- Show sessions whose transcript is gone from the history by @yteraoka in https://github.com/yteraoka/ccr/pull/104
+
 ## [v3.0.0](https://github.com/yteraoka/ccr/compare/v2.4.0...v3.0.0) - 2026-10-18
 
 - Record prompts and answers via hooks and search them with BM25 + vec1 by @yteraoka in https://github.com/yteraoka/ccr/pull/98
