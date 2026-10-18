@@ -219,9 +219,34 @@ meaning (vector search with SQLite's
 
 ### Recording
 
-Register `ccr hook` for the `UserPromptSubmit` and `Stop` hooks in
-`~/.claude/settings.json` (in each config directory's `settings.json` if
-you use several):
+Register `ccr hook` for Claude Code's `UserPromptSubmit` and `Stop` hooks:
+
+```bash
+ccr hook install                  # you, every project: $CLAUDE_CONFIG_DIR/settings.json
+ccr hook install -A               # ...in every config directory of the config file
+ccr hook install -scope project   # this project, for everyone: ./.claude/settings.json
+ccr hook install -scope local     # this project, just you: ./.claude/settings.local.json
+sudo ccr hook install -scope system   # every user of this machine (managed settings)
+```
+
+| Scope | File written |
+| --- | --- |
+| `user` (default) | `$CLAUDE_CONFIG_DIR/settings.json` (`~/.claude/settings.json`) |
+| `project` | `.claude/settings.json` in the current directory (usually committed, so it applies to everyone working on the project) |
+| `local` | `.claude/settings.local.json` in the current directory (kept out of git: only you) |
+| `system` | `managed-settings.d/ccr.json` in the managed settings directory: `/Library/Application Support/ClaudeCode` (macOS), `/etc/claude-code` (Linux, WSL), `C:\Program Files\ClaudeCode` (Windows) |
+
+The rest of the settings file, other hooks included, is left as it is,
+and running it again changes nothing. For `system`, ccr writes a file of
+its own in `managed-settings.d/` (which Claude Code merges with
+`managed-settings.json`) rather than editing an administrator's file;
+note that managed settings delivered by MDM or the claude.ai console take
+the place of these files. The command registered is `ccr hook` when the
+`ccr` on `PATH` is the one running, otherwise its full path; `-command`
+sets it, and `-print` shows the result without writing it.
+`ccr hook uninstall` (same options) takes the hooks out again.
+
+Written by hand, the hooks are:
 
 ```json
 {

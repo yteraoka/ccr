@@ -185,6 +185,24 @@ q / Esc / Ctrl-C で何も実行せず終了します。
 `transcript_path` の jsonl から、最後に人が入力したプロンプト以降の最後の assistant
 メッセージのテキストを取り出します。それ以外のイベントや空のテキストは何もしません。
 
+`ccr hook install|uninstall [-scope user|project|local|system] [-A] [-command cmd] [-print]`
+は Claude Code の設定ファイルに上記の hook(`UserPromptSubmit` / `Stop` に
+`{"type": "command", "command": <cmd>, "async": true}`)を追加/削除します
+(`ccr hook` に引数があればこのサブコマンド、無ければ hook 本体として動作します)。
+書き込み先は user = `${CLAUDE_CONFIG_DIR}/settings.json`(`-A` なら設定ファイルの
+全 config ディレクトリ)、project = カレントディレクトリの `.claude/settings.json`、local = カレントディレクトリの
+`.claude/settings.local.json`、
+system = managed settings ディレクトリ(macOS `/Library/Application Support/ClaudeCode`、
+Linux / WSL `/etc/claude-code`、Windows `C:\Program Files\ClaudeCode`)の
+`managed-settings.d/ccr.json`(管理者の `managed-settings.json` は触らない。
+uninstall で空になったら削除)。トップレベルなどのキーの順序と他の hook は保ったまま
+編集し(2 スペースで整形し直す)、既に ccr の hook がある event には追加しません。
+ccr の hook かどうかはコマンドの最後の語が `hook` で、その前が basename `ccr`
+(`ccr.exe`)のものかで判定します。cmd の既定は `PATH` 上の `ccr` が実行中の
+バイナリと同じなら `ccr hook`、違えば実行中のバイナリのフルパス + ` hook`。
+一時ファイル経由で置き換え、既存ファイルのパーミッションを保ちます。`-print` は
+書き込まずに結果を stdout に出します。
+
 `ccr import [-A] [-no-embed]` は既存の transcript
 (`${CLAUDE_CONFIG_DIR}/projects/*/<session_id>.jsonl`、`-A` なら設定ファイルの全
 config ディレクトリ。sub agent の transcript は対象外)を履歴に取り込みます。

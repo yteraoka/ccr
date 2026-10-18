@@ -218,8 +218,33 @@ embedding モデルを設定すると意味による検索(SQLite の
 
 ### 記録
 
-`~/.claude/settings.json`(複数の config ディレクトリを使っている場合はそれぞれの
-`settings.json`)で `UserPromptSubmit` と `Stop` の hook に `ccr hook` を登録します:
+Claude Code の `UserPromptSubmit` と `Stop` の hook に `ccr hook` を登録します:
+
+```bash
+ccr hook install                  # 自分の全プロジェクト: $CLAUDE_CONFIG_DIR/settings.json
+ccr hook install -A               # 設定ファイルの全 config ディレクトリに
+ccr hook install -scope project   # このプロジェクトの全員: ./.claude/settings.json
+ccr hook install -scope local     # このプロジェクトの自分だけ: ./.claude/settings.local.json
+sudo ccr hook install -scope system   # このマシンの全ユーザー(managed settings)
+```
+
+| スコープ | 書き込むファイル |
+| --- | --- |
+| `user`(既定) | `$CLAUDE_CONFIG_DIR/settings.json`(`~/.claude/settings.json`) |
+| `project` | カレントディレクトリの `.claude/settings.json`(通常はコミットするので、プロジェクトの全員に効きます) |
+| `local` | カレントディレクトリの `.claude/settings.local.json`(git の管理外なので自分だけ) |
+| `system` | managed settings のディレクトリの `managed-settings.d/ccr.json`: `/Library/Application Support/ClaudeCode`(macOS)、`/etc/claude-code`(Linux、WSL)、`C:\Program Files\ClaudeCode`(Windows) |
+
+設定ファイルの他の部分(他の hook も含む)はそのまま残し、2回実行しても何も
+変わりません。`system` では管理者のファイルを書き換えず、`managed-settings.d/` に
+ccr 専用のファイルを置きます(Claude Code が `managed-settings.json` とマージします)。
+MDM や claude.ai のコンソールから配布される managed settings がある場合はそちらが
+これらのファイルに代わって使われる点に注意してください。登録するコマンドは、`PATH` 上の
+`ccr` が実行中のものと同じなら `ccr hook`、そうでなければフルパスです。`-command` で
+指定でき、`-print` で書き込まずに結果を表示します。`ccr hook uninstall`(同じ
+オプション)で取り除けます。
+
+手で書く場合は次のとおりです:
 
 ```json
 {
