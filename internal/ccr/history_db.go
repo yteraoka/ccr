@@ -55,10 +55,17 @@ CREATE TABLE IF NOT EXISTS messages (
 	embedded   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS messages_pending ON messages(id) WHERE embedded = 0;
+CREATE INDEX IF NOT EXISTS messages_session ON messages(session_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
 	text, content='messages', content_rowid='id', tokenize='` + historyTokenizerName + `'
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- transcripts ccr import has read, so an unchanged one is not read again
+CREATE TABLE IF NOT EXISTS imported_files (
+	path  TEXT PRIMARY KEY,
+	size  INTEGER NOT NULL,
+	mtime INTEGER NOT NULL -- unix nanoseconds
+);
 `
 
 // historyDB is the prompt/answer history: every message's text, a
@@ -121,6 +128,14 @@ func (h *historyDB) add(m historyMessage) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback() //nolint:errcheck
+	id, err := insertMessage(tx, m)
+	if err != nil {
+		return 0, err
+	}
+	return id, tx.Commit()
+}
+
+func insertMessage(tx *sql.Tx, m historyMessage) (int64, error) {
 	res, err := tx.Exec(`INSERT INTO messages(session_id, role, text, cwd, config_dir, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		m.sessionID, m.role, m.text, m.cwd, m.configDir, m.createdAt.UTC().Format(time.RFC3339Nano))
 	if err != nil {
@@ -133,7 +148,49 @@ func (h *historyDB) add(m historyMessage) (int64, error) {
 	if _, err := tx.Exec(`INSERT INTO messages_fts(rowid, text) VALUES (?, ?)`, id, m.text); err != nil {
 		return 0, err
 	}
-	return id, tx.Commit()
+	return id, nil
+}
+
+// importedFileUnchanged reports whether the transcript at path was
+// imported when it had this size and mtime, so it has nothing new.
+func (h *historyDB) importedFileUnchanged(path string, size int64, mtime time.Time) (bool, error) {
+	var n int
+	err := h.db.QueryRow(`SELECT count(*) FROM imported_files WHERE path = ? AND size = ? AND mtime = ?`,
+		path, size, mtime.UnixNano()).Scan(&n)
+	return n > 0, err
+}
+
+// importMessages records the messages of the transcript at path, skipping
+// any already in the history (the hook recorded it, or an earlier import
+// did): the same session, role and text count as the same message. It
+// remembers path's size and mtime so an unchanged transcript is skipped
+// next time, and returns how many messages were new.
+func (h *historyDB) importMessages(path string, size int64, mtime time.Time, msgs []historyMessage) (int, error) {
+	tx, err := h.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	added := 0
+	for _, m := range msgs {
+		var n int
+		if err := tx.QueryRow(`SELECT count(*) FROM messages WHERE session_id = ? AND role = ? AND text = ?`,
+			m.sessionID, m.role, m.text).Scan(&n); err != nil {
+			return 0, err
+		}
+		if n > 0 {
+			continue
+		}
+		if _, err := insertMessage(tx, m); err != nil {
+			return 0, err
+		}
+		added++
+	}
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO imported_files(path, size, mtime) VALUES (?, ?, ?)`,
+		path, size, mtime.UnixNano()); err != nil {
+		return 0, err
+	}
+	return added, tx.Commit()
 }
 
 const (

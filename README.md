@@ -235,7 +235,26 @@ you use several):
 `async` keeps the hook (and the embedding request it makes) from delaying
 your prompt. The database is `${XDG_DATA_HOME:-$HOME/.local/share}/ccr/history.db`
 unless `history.db` in the [config file](#config-file) or `CCR_HISTORY_DB`
-says otherwise. Only what is recorded from now on is searchable.
+says otherwise.
+
+### Importing existing sessions
+
+The hook only sees what is said after it is set up. To make earlier
+sessions searchable too, import their transcripts:
+
+```bash
+ccr import        # every session under the current CLAUDE_CONFIG_DIR
+ccr import -A     # ...and under every config_dirs entry of the config file
+```
+
+Each prompt you typed and, for each turn, Claude's final answer are
+recorded, as the hook would have recorded them. Messages already in the
+history (recorded by the hook, or by an earlier import) are not added
+again, and transcripts unchanged since the last import are not read again,
+so it is safe to run as often as you like. A turn still in progress in a
+running session is left for a later import to pick up once it has
+finished. With an embedding model configured the imported messages are
+embedded straight away (`-no-embed` leaves that to the next `ccr search`).
 
 ### Searching
 
