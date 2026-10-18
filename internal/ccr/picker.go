@@ -22,6 +22,9 @@ func PrintUsage() {
                        search the prompts and answers recorded by ccr hook
   ccr import [-A] [-no-embed]
                        add the prompts and answers of existing transcripts to the history
+  ccr hook install [-scope user|project|system] [-A] [-command cmd] [-print]
+  ccr hook uninstall [-scope user|project|system] [-A] [-print]
+                       register (or remove) ccr hook in Claude Code's settings
   ccr hook             record a prompt or answer (run from Claude Code's
                        UserPromptSubmit and Stop hooks; reads the hook JSON on stdin)
   ccr -v               print version and exit
