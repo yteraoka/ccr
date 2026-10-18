@@ -229,7 +229,7 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
   など)の連続は重なりのある bigram と(文書側のみ)末尾の1文字、それ以外の
   文字・数字の連続は1語とし、全角英数字→半角、半角カナ→全角、小文字化で正規化します。
 - 設定ファイルの `history.embedding`(OpenAI 互換の `/v1/embeddings`:
-  `url` / `model` / `api_key_env` / `dimensions` / `query_prefix` /
+  `url` / `model` / `api_key_env` / `dimensions` / `timeout` / `query_prefix` /
   `document_prefix`)があればベクトル検索を有効にします。既定のモデルは Ruri v3
   (`url` 省略時 `http://127.0.0.1:8080/v1/embeddings`、`model` 省略時
   `cl-nagoya/ruri-v3-310m`)で、`scripts/ruri-embedding-server.py`(uv で実行する
@@ -244,7 +244,8 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
   未指定なら `検索クエリ: ` / `検索文書: ` を付けます(`""` を指定すれば付けません)。vec1 の仮想テーブル
   `messages_vec`(flat index、cos 距離、最初のベクトルで次元が決まるため初回保存時に
   作成)に rowid = messages.id で保存します。hook は記録直後にそのメッセージを
-  embedding し、失敗したもの・未処理のものは `ccr search` が検索前にまとめて
+  embedding し、失敗したもの・未処理のものは `ccr search`(と `ccr import`)が 8 件ずつの
+  リクエストで(1リクエストの制限時間は `timeout` 秒、既定 300 秒)
   embedding します。モデル(url / model / dimensions / document_prefix)が
   変わったら `messages_vec` を作り直して全件 embedding し直します。
 - `ccr search [-g] [-l n] [-role user|assistant] [-mode hybrid|keyword|vector] <query>`:

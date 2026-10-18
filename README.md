@@ -411,6 +411,7 @@ LM Studio, llama.cpp, OpenAI, Voyage AI:
 | `model` | The model. Default `cl-nagoya/ruri-v3-310m` |
 | `api_key_env` | Environment variable holding the API key, sent as a bearer token |
 | `dimensions` | Ask the model for shorter vectors, where it supports it |
+| `timeout` | Seconds one request may take (default 300). Messages are sent 8 at a time; if a request still times out, run the command again: what was already embedded is kept |
 | `query_prefix`, `document_prefix` | Prepended to queries / stored texts. Default: Ruri v3's for Ruri v3, none otherwise (e5 wants `query: ` / `passage: `); `""` turns the Ruri default off |
 
 The hook embeds each message as it records it; anything it could not
