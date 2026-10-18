@@ -972,6 +972,9 @@ type sessionHeaderInfo struct {
 	// (a sub agent's own transcript), and backLink points home from it.
 	subtitle string
 	backLink string
+	// notice is a caution shown above the messages: that the page was
+	// rebuilt from the history because the transcript is gone, say.
+	notice string
 	// agents are the sub agent transcripts this session spawned, and links
 	// resolves them to URLs.
 	agents []subagentInfo
@@ -1077,6 +1080,9 @@ func renderTranscriptHTML(meta sessionHeaderInfo, entries []transcriptEntry) str
 		header.WriteString("<div><strong>Cost:</strong> " + html.EscapeString(formatUSD(meta.cost.TotalCostUSD)) + "</div>\n")
 	}
 	header.WriteString("</div>\n")
+	if meta.notice != "" {
+		header.WriteString(`<div class="notice">` + html.EscapeString(meta.notice) + "</div>\n")
+	}
 	header.WriteString(renderCostState(meta.cost))
 
 	kinds, tools := collectFilterRows(entries)
@@ -1349,6 +1355,14 @@ h1 {
 }
 .meta strong { color: var(--ink); font-weight: 800; }
 .subtitle { font-size: 0.9rem; color: var(--muted); margin-bottom: 0.5rem; font-weight: 700; }
+.notice {
+  margin: -1rem 0 2rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  background: #fff8e6;
+  border: 1px solid #f0d58c;
+  border-radius: 8px;
+}
 .cost {
   margin: -1.5rem 0 2rem;
   font-size: 0.85rem;

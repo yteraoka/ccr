@@ -40,6 +40,8 @@ type historyView struct {
 	cursor   int
 	top      int
 	status   string
+	// gone caches, per session id, whether its transcript has been deleted
+	gone map[string]bool
 }
 
 // historyResultsMsg carries a finished search back to the model.
@@ -118,6 +120,20 @@ func (v *historyView) finish(msg historyResultsMsg) {
 	default:
 		v.status = fmt.Sprintf("%d results for %q (%s)", len(msg.results), msg.query, msg.mode)
 	}
+}
+
+// transcriptGone reports whether r's session no longer has a transcript,
+// remembering the answer: the preview asks on every redraw.
+func (v *historyView) transcriptGone(r historyMessage) bool {
+	gone, ok := v.gone[r.sessionID]
+	if !ok {
+		gone = !transcriptExists(r.sessionID, r.configDir)
+		if v.gone == nil {
+			v.gone = make(map[string]bool)
+		}
+		v.gone[r.sessionID] = gone
+	}
+	return gone
 }
 
 // current is the message under the cursor, if there is one.
@@ -201,12 +217,21 @@ func (m pickerModel) updateHistory(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		v.move(len(v.results), rows)
 	case "enter":
 		if r, ok := v.current(); ok {
+			// claude cannot resume a session without its transcript, and
+			// would only say so after ccr has handed the terminal over
+			if v.transcriptGone(r) {
+				v.status = "this session's transcript is gone, so it cannot be resumed (v shows what the history kept)"
+				return m, nil
+			}
 			m.selected = sessionEntry{id: r.sessionID, cwd: r.cwd, configDir: r.configDir}
 			return m, tea.Quit
 		}
 	case "i":
 		if r, ok := v.current(); ok {
-			rememberConfigDir(r.configDir)
+			if v.transcriptGone(r) {
+				v.status = "this session's transcript is gone (v shows what the history kept)"
+				return m, nil
+			}
 			viewer, err := newJSONLViewer(r.sessionID)
 			if err != nil {
 				v.status = "error: " + err.Error()
@@ -286,8 +311,11 @@ func (v *historyView) messageView(width, height int) string {
 		truncate("Session: "+r.sessionID, width),
 		truncate("Directory: "+r.cwd, width),
 		truncate(fmt.Sprintf("%s  %s", r.createdAt.Local().Format("2006-01-02 15:04:05"), roleLabel(r.role)), width),
-		"",
 	}
+	if v.transcriptGone(r) {
+		lines = append(lines, truncate("Transcript: gone (v shows what the history kept)", width))
+	}
+	lines = append(lines, "")
 
 	var body []string
 	firstHit := -1

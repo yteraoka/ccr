@@ -58,7 +58,19 @@ func openHistory(t *testing.T) tea.Model {
 	return pm
 }
 
+// sessionTranscripts lays down a transcript for each of ids in a fresh
+// CLAUDE_CONFIG_DIR, so the history screen sees them as still there.
+func sessionTranscripts(t *testing.T, ids ...string) {
+	t.Helper()
+	cfg := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", cfg)
+	for _, id := range ids {
+		writeTranscript(t, filepath.Join(cfg, "projects", "-work", id+".jsonl"), tPrompt1)
+	}
+}
+
 func TestHistoryScreenSearchesAndResumes(t *testing.T) {
+	sessionTranscripts(t, "s1", "s2", "s3")
 	historyFixture(t,
 		historyMessage{sessionID: "s1", role: "user", cwd: "/work/a", configDir: "/cfg-a", text: "全文検索を日本語に対応させたい", createdAt: time.Now().Add(-time.Hour)},
 		historyMessage{sessionID: "s2", role: "assistant", cwd: "/work/b", text: "日本語の検索には bigram を使います"},
@@ -141,5 +153,25 @@ func TestHistoryMessageViewStartsNearTheMatch(t *testing.T) {
 	}
 	if lines := strings.Count(view, "\n") + 1; lines != 10 {
 		t.Errorf("message view is %d lines, want 10", lines)
+	}
+}
+
+func TestHistoryScreenKnowsDeletedTranscripts(t *testing.T) {
+	sessionTranscripts(t) // none of the sessions has its transcript any more
+	historyFixture(t, historyMessage{sessionID: "gone", role: "user", text: "hook の設定"})
+
+	m := runSearch(t, typeKeys(t, openHistory(t), "hook"))
+	if screen := ansi.Strip(m.View().Content); !strings.Contains(screen, "Transcript: gone") {
+		t.Errorf("preview does not say the transcript is gone:\n%s", screen)
+	}
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEnter}, {Code: 'i', Text: "i"}} {
+		updated, cmd := m.Update(key)
+		pm := updated.(pickerModel)
+		if pm.selected.id != "" || cmd != nil || pm.viewer != nil {
+			t.Errorf("%v on a session without a transcript: selected %q, viewer %v", key, pm.selected.id, pm.viewer != nil)
+		}
+		if !strings.Contains(pm.history.status, "transcript is gone") {
+			t.Errorf("%v: status = %q", key, pm.history.status)
+		}
 	}
 }
