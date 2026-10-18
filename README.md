@@ -366,6 +366,28 @@ Name the same model in the config if you change it. ccr adds the
 whose name contains `ruri-v3`, so any other server for it (llama.cpp with a
 GGUF conversion, Text Embeddings Inference, ...) works the same way.
 
+To keep the server running in the background and start it automatically,
+`scripts/ruri-embedding-service.sh` sets it up as a service of your OS:
+
+```bash
+scripts/ruri-embedding-service.sh install     # or: curl -fsSL https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embedding-service.sh | bash -s -- install
+scripts/ruri-embedding-service.sh status
+scripts/ruri-embedding-service.sh uninstall
+```
+
+| Where | How it starts | Log |
+| --- | --- | --- |
+| macOS | launchd LaunchAgent (`~/Library/LaunchAgents/com.github.yteraoka.ccr.ruri-embedding.plist`), at login, restarted if it crashes | `~/Library/Logs/ccr-ruri-embedding.log` |
+| Linux, and WSL with systemd | systemd user service (`~/.config/systemd/user/ccr-ruri-embedding.service`), at login (at boot with `--linger`), restarted if it fails | `journalctl --user -u ccr-ruri-embedding` |
+| WSL without systemd | from your login shell's profile (`~/.profile`, `~/.bash_profile` or `~/.zprofile`) when a WSL shell opens, unless already running | `~/.local/state/ccr/ruri-embedding-server.log` |
+
+It copies the server to `~/.local/share/ccr/` (downloading it when run
+outside a checkout), installs its Python dependencies with uv up front, and
+takes the server's `--model`, `--host`, `--port` and `--device` options;
+`--dry-run` shows what it would do. On WSL, turning systemd on
+(`[boot]` `systemd=true` in `/etc/wsl.conf`, then `wsl --shutdown`) gets the
+systemd service instead, which also restarts the server when it fails.
+
 Any other OpenAI-compatible embeddings endpoint works as well — Ollama,
 LM Studio, llama.cpp, OpenAI, Voyage AI:
 

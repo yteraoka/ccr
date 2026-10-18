@@ -234,7 +234,11 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
   (`url` 省略時 `http://127.0.0.1:8080/v1/embeddings`、`model` 省略時
   `cl-nagoya/ruri-v3-310m`)で、`scripts/ruri-embedding-server.py`(uv で実行する
   sentence-transformers のサーバー、prefix は付けない)がその既定に合わせて listen
-  します。名前に `ruri-v3` を含むモデルには、`query_prefix` / `document_prefix` が
+  します。`scripts/ruri-embedding-service.sh install|uninstall|status` はこのサーバーを
+  `~/.local/share/ccr/` にコピーして(リポジトリ外なら GitHub から取得)、macOS では
+  launchd の LaunchAgent、`/run/systemd/system` がある Linux / WSL では systemd の
+  ユーザーサービス、systemd の無い WSL ではログインシェルの profile から起動する
+  ランチャー(pid ファイルで二重起動を防ぐ)として自動起動を設定します。名前に `ruri-v3` を含むモデルには、`query_prefix` / `document_prefix` が
   未指定なら `検索クエリ: ` / `検索文書: ` を付けます(`""` を指定すれば付けません)。vec1 の仮想テーブル
   `messages_vec`(flat index、cos 距離、最初のベクトルで次元が決まるため初回保存時に
   作成)に rowid = messages.id で保存します。hook は記録直後にそのメッセージを

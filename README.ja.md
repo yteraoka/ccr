@@ -357,6 +357,28 @@ uv run https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embeddin
 付けるので、他の方法(GGUF に変換したものを llama.cpp で、Text Embeddings
 Inference で、など)で Ruri v3 を動かしても同じように使えます。
 
+サーバーをバックグラウンドで動かし続け、自動で起動するには、
+`scripts/ruri-embedding-service.sh` で OS のサービスとして登録します:
+
+```bash
+scripts/ruri-embedding-service.sh install     # または: curl -fsSL https://raw.githubusercontent.com/yteraoka/ccr/main/scripts/ruri-embedding-service.sh | bash -s -- install
+scripts/ruri-embedding-service.sh status
+scripts/ruri-embedding-service.sh uninstall
+```
+
+| 環境 | 起動のしかた | ログ |
+| --- | --- | --- |
+| macOS | launchd の LaunchAgent(`~/Library/LaunchAgents/com.github.yteraoka.ccr.ruri-embedding.plist`)。ログイン時に起動し、落ちたら再起動 | `~/Library/Logs/ccr-ruri-embedding.log` |
+| Linux、systemd が有効な WSL | systemd のユーザーサービス(`~/.config/systemd/user/ccr-ruri-embedding.service`)。ログイン時(`--linger` ならブート時)に起動し、失敗したら再起動 | `journalctl --user -u ccr-ruri-embedding` |
+| systemd が無効な WSL | ログインシェルの profile(`~/.profile`、`~/.bash_profile`、`~/.zprofile`)から、WSL のシェルを開いたときに起動(既に動いていれば何もしない) | `~/.local/state/ccr/ruri-embedding-server.log` |
+
+サーバーは `~/.local/share/ccr/` にコピーし(リポジトリの外で実行した場合は
+ダウンロード)、Python の依存パッケージは登録時に uv で入れておきます。サーバーの
+`--model`、`--host`、`--port`、`--device` を指定でき、`--dry-run` で実行内容を
+表示します。WSL では systemd を有効にする(`/etc/wsl.conf` の `[boot]` に
+`systemd=true` を書いて `wsl --shutdown`)と、失敗時に再起動もする systemd の
+サービスとして登録されます。
+
 それ以外の OpenAI 互換の embeddings エンドポイント(Ollama、LM Studio、llama.cpp、
 OpenAI、Voyage AI)も使えます:
 
