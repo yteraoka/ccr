@@ -42,6 +42,9 @@ type embeddingConfig struct {
 	// Dimensions is passed on as "dimensions" for models that can shorten
 	// their vectors; 0 leaves the model's own size.
 	Dimensions int `json:"dimensions"`
+	// Timeout is how many seconds one request may take; 0 means
+	// defaultEmbeddingTimeout.
+	Timeout int `json:"timeout"`
 	// QueryPrefix and DocumentPrefix are prepended to search queries and
 	// stored texts, for models trained with them (e5's "query: " and
 	// "passage: ", for instance). Unset, they default to Ruri v3's for a

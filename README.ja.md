@@ -401,6 +401,7 @@ OpenAI、Voyage AI)も使えます:
 | `model` | モデル。既定は `cl-nagoya/ruri-v3-310m` |
 | `api_key_env` | API キーを格納した環境変数名。bearer token として送ります |
 | `dimensions` | 対応するモデルでベクトルの次元を短くする |
+| `timeout` | 1回のリクエストの制限時間(秒、既定 300)。メッセージは 8 件ずつ送ります。それでもタイムアウトした場合は同じコマンドを実行し直してください(embedding 済みの分は保存されています) |
 | `query_prefix`、`document_prefix` | クエリ / 保存するテキストの先頭に付ける文字列。既定は Ruri v3 なら Ruri v3 のもの、それ以外は無し(e5 なら `query: ` / `passage: `)。`""` で Ruri v3 の既定を無効にできます |
 
 hook は記録するたびにそのメッセージを embedding します。できなかったもの(サーバーが

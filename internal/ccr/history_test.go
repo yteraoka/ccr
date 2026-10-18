@@ -430,3 +430,40 @@ func TestEmbedSendsPrefixes(t *testing.T) {
 		t.Errorf("sent %q, want %q", got, want)
 	}
 }
+
+func TestEmbedderTimeout(t *testing.T) {
+	if got := newEmbedder(&embeddingConfig{}).client.Timeout; got != defaultEmbeddingTimeout {
+		t.Errorf("default timeout = %v, want %v", got, defaultEmbeddingTimeout)
+	}
+	if got := newEmbedder(&embeddingConfig{Timeout: 900}).client.Timeout; got != 15*time.Minute {
+		t.Errorf("timeout: 900 = %v, want 15m", got)
+	}
+
+	// a server slower than the timeout fails the request
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(1500 * time.Millisecond)
+	}))
+	defer srv.Close()
+	if _, err := newEmbedder(&embeddingConfig{URL: srv.URL, Timeout: 1}).embedQuery(t.Context(), "q"); err == nil {
+		t.Error("a request outlasting the timeout: want an error")
+	}
+}
+
+func TestEmbedPendingBatches(t *testing.T) {
+	cfg, calls := fakeEmbeddings(t)
+	e := newEmbedder(cfg)
+	h := newTestHistoryDB(t)
+	for i := 0; i < 2*embeddingBatchSize+1; i++ {
+		addMessages(t, h, historyMessage{sessionID: "s", role: "user", text: "abc"})
+	}
+	if err := h.prepareVectors(e.key()); err != nil {
+		t.Fatal(err)
+	}
+	var progress []int
+	if err := h.embedPending(t.Context(), e, func(done, _ int) { progress = append(progress, done) }); err != nil {
+		t.Fatal(err)
+	}
+	if *calls != 3 || !reflect.DeepEqual(progress, []int{8, 16, 17}) {
+		t.Errorf("%d requests, progress %v; want 3 batches of at most %d", *calls, progress, embeddingBatchSize)
+	}
+}

@@ -21,8 +21,16 @@ import (
 // what it is about.
 const embeddingMaxRunes = 6000
 
-// embeddingTimeout bounds one request to the embeddings endpoint.
-const embeddingTimeout = 60 * time.Second
+// defaultEmbeddingTimeout bounds one request to the embeddings endpoint
+// unless the config sets its own. It is generous because a local model on
+// the CPU (Ruri v3 by default) takes a while over a batch of long answers,
+// and a request that times out wastes the work done on it.
+const defaultEmbeddingTimeout = 5 * time.Minute
+
+// embeddingBatchSize is how many messages go into one request when
+// catching up on messages without a vector, small enough that a batch of
+// long answers on a CPU stays well inside the timeout.
+const embeddingBatchSize = 8
 
 // The embedding model used when the config file names none: Ruri v3, a
 // Japanese embedding model, at the address scripts/ruri-embedding-server.py
@@ -60,7 +68,11 @@ func newEmbedder(cfg *embeddingConfig) *embedder {
 	if cfg == nil {
 		return nil
 	}
-	e := &embedder{cfg: *cfg, client: &http.Client{Timeout: embeddingTimeout}}
+	timeout := defaultEmbeddingTimeout
+	if cfg.Timeout > 0 {
+		timeout = time.Duration(cfg.Timeout) * time.Second
+	}
+	e := &embedder{cfg: *cfg, client: &http.Client{Timeout: timeout}}
 	if e.cfg.URL == "" {
 		e.cfg.URL = defaultEmbeddingURL
 	}

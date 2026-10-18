@@ -298,7 +298,7 @@ func (h *historyDB) embedPending(ctx context.Context, e *embedder, progress func
 	}
 	done := 0
 	for {
-		batch, err := h.pending(32)
+		batch, err := h.pending(embeddingBatchSize)
 		if err != nil {
 			return err
 		}
