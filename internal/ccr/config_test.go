@@ -160,6 +160,12 @@ func TestLookupSessionFileSearchesEveryConfigDir(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", a)
 	writeCCRConfig(t, `{"config_dirs": [`+quoteJSON(b)+`]}`)
 
+	if _, err := lookupSessionFile("session-b"); err == nil {
+		t.Error("lookupSessionFile without -A: want only the current config dir searched")
+	}
+	useAllConfigDirs = true
+	t.Cleanup(func() { useAllConfigDirs = false })
+
 	got, err := lookupSessionFile("session-b")
 	if err != nil {
 		t.Fatalf("lookupSessionFile: %v", err)

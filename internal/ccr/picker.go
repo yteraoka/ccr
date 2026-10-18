@@ -17,17 +17,19 @@ import (
 // PrintUsage prints command-line usage help to stderr.
 func PrintUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  ccr [-g] [-n]        interactive session picker (current project, or -g for every project)
+  ccr [-g] [-A] [-n]   interactive session picker (current project, or -g for every project)
   ccr -v               print version and exit
 
 options:
   -g                   list sessions from every project, not just the current directory
+  -A                   list sessions from every config_dirs entry of the config file too,
+                       not just the current CLAUDE_CONFIG_DIR
   -n, -no-browser      on v, print the transcript URL instead of opening a browser
                        (for machines with no browser; also settable with CCR_NO_BROWSER=1)
 
 config file (${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json, or $CCR_CONFIG):
   {"config_dirs": ["~/.claude", "~/.claude-work"]}
-                       also list sessions from these Claude Code config directories`)
+                       Claude Code config directories -A lists sessions from`)
 }
 
 // RunPicker implements the default ccr action: an interactive picker that
@@ -38,6 +40,7 @@ config file (${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json, or $CCR_CONFIG):
 func RunPicker(args []string) error {
 	fs := flag.NewFlagSet("ccr", flag.ExitOnError)
 	global := fs.Bool("g", false, "list sessions from every project, not just the current directory")
+	allDirs := fs.Bool("A", false, "list sessions from every config directory in the config file")
 	noBrowser := fs.Bool("no-browser", envIsTrue(os.Getenv("CCR_NO_BROWSER")), "on v, show the transcript URL instead of opening a browser")
 	noBrowserShort := fs.Bool("n", false, "shorthand for -no-browser")
 	if err := fs.Parse(args); err != nil {
@@ -47,9 +50,13 @@ func RunPicker(args []string) error {
 		return fmt.Errorf("unexpected argument: %s", fs.Arg(0))
 	}
 
-	dirs, err := configDirs()
-	if err != nil {
-		return err
+	dirs := []string{configDir()}
+	if *allDirs {
+		var err error
+		if dirs, err = configDirs(); err != nil {
+			return err
+		}
+		useAllConfigDirs = true
 	}
 	entries, err := sessionsForPicker(dirs, *global)
 	if err != nil {

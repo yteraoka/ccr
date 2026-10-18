@@ -11,7 +11,7 @@ selected session's original working directory and replaces itself via
 Session files are looked up under the `CLAUDE_CONFIG_DIR` environment
 variable, or `$HOME/.claude` if it isn't set. If you keep several Claude
 Code config directories (e.g. work and personal), list them in the
-[config file](#config-file) to browse all of them at once.
+[config file](#config-file) and pass `-A` to browse all of them at once.
 
 By default only sessions for the current directory are listed; pass `-g`
 to also list sessions from other directories.
@@ -65,7 +65,9 @@ ccr -g
 By default, only sessions belonging to the current directory are targeted
 (matched the same way Claude Code encodes `${CLAUDE_CONFIG_DIR}/projects/<dir>`
 — every character outside `a-zA-Z0-9` in the cwd becomes `-`). Adding `-g`
-targets sessions from every project instead.
+targets sessions from every project instead. Adding `-A` also lists
+sessions from every Claude Code config directory registered in the
+[config file](#config-file); it combines with `-g`.
 
 On a machine with no browser — a server you are working on over SSH,
 typically — add `-n` (`-no-browser`) so that `v` only prints the transcript
@@ -103,7 +105,7 @@ The terminal splits into two panes:
 
 ### Environment variables
 
-- `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`. More directories can be added in the [config file](#config-file).
+- `CLAUDE_CONFIG_DIR` — where Claude Code stores its data. Defaults to `${HOME}/.claude`. More directories can be added in the [config file](#config-file) for `-A`.
 - `CCR_CONFIG` — path of ccr's config file. Defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json`.
 - `BROWSER` — the command used to open the transcript viewer (see below). Follows the common convention: if any word contains `%s`, the URL is substituted there; otherwise the URL is appended as the last argument. If `BROWSER` is unset, macOS falls back to opening the URL with `open`; on other platforms there is nothing to fall back to, so `v` shows the URL instead of opening it.
 - `CCR_NO_BROWSER` — set it to `1` (anything but `0`, `false`, `no`, or `off`) to make `v` show the transcript URL instead of opening a browser, the same as passing `-n`.
@@ -210,7 +212,8 @@ Then open the URL that `ccr` printed, on your own machine.
 `ccr` reads an optional JSON config file from
 `${XDG_CONFIG_HOME:-$HOME/.config}/ccr/config.json` (override the path with
 the `CCR_CONFIG` environment variable). `config_dirs` lists additional
-Claude Code config directories to list sessions from:
+Claude Code config directories that `ccr -A` lists sessions from. Without
+`-A` the file is not read and only the current `CLAUDE_CONFIG_DIR` is used:
 
 ```json
 {
@@ -226,8 +229,8 @@ Claude Code config directories to list sessions from:
   `$HOME/.claude`) is always included, and listed first. Duplicates
   (including the same directory reached through a symlink) count once.
   Directories that don't exist are skipped.
-- Sessions from every directory are merged into one list, both for the
-  default current-directory view and for `-g`. When more than one
+- With `-A`, sessions from every directory are merged into one list, both
+  for the default current-directory view and for `-g`. When more than one
   directory is in use, the preview shows which one the session lives in
   (`Config:`).
 - `Enter` resumes the session with `CLAUDE_CONFIG_DIR` pointing at the

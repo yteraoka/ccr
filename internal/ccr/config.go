@@ -103,10 +103,17 @@ func configDirs() ([]string, error) {
 	return dirs, nil
 }
 
-// lookupSessionFile finds sessionID's jsonl in any of the config
-// directories, the first one holding it winning.
+// useAllConfigDirs is set by -A: session lookups then search every config
+// directory of the config file, not just the current one.
+var useAllConfigDirs bool
+
+// lookupSessionFile finds sessionID's jsonl in the current config
+// directory, or with -A in any of them, the first one holding it winning.
 func lookupSessionFile(sessionID string) (string, error) {
-	dirs, _ := configDirs()
+	dirs := []string{configDir()}
+	if useAllConfigDirs {
+		dirs, _ = configDirs()
+	}
 	for _, dir := range dirs {
 		if path, err := findSessionFile(filepath.Join(dir, "projects"), sessionID); err == nil {
 			return path, nil
