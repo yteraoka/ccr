@@ -14,7 +14,7 @@ import (
 // historyResultLimit is how many matches the history screen asks for.
 const historyResultLimit = 100
 
-const historyLegend = "j/k/n/p: move  space/b: page  enter: resume  i: jsonl  v: browser  s or /: search  q: back"
+const historyLegend = "j/k/n/p: move  space/b: page  enter: resume  i: jsonl  v: browser  s or /: search  m: mode  q: back"
 
 // historyView is the picker's history search screen (s): a query prompt,
 // the prompts and answers matching it, and the one under the cursor in
@@ -42,6 +42,10 @@ type historyView struct {
 	status   string
 	// gone caches, per session id, whether its transcript has been deleted
 	gone map[string]bool
+	// mode is how the next search ranks (hybrid, keyword or vector), one of
+	// modes, the ones the config allows
+	mode  string
+	modes []string
 }
 
 // historyResultsMsg carries a finished search back to the model.
@@ -56,7 +60,35 @@ type historyResultsMsg struct {
 }
 
 func newHistoryView(global bool) *historyView {
-	return &historyView{open: true, typing: true, global: global}
+	modes := historySearchModes()
+	return &historyView{open: true, typing: true, global: global, modes: modes, mode: modes[0]}
+}
+
+// historySearchModes are the search modes the config allows, the default
+// first: all three with an embedding model, keyword search alone without.
+func historySearchModes() []string {
+	cfg, err := loadFileConfig(ccrConfigPath())
+	if err == nil && cfg.History.Embedding != nil {
+		return []string{searchHybrid, searchKeyword, searchVector}
+	}
+	return []string{searchKeyword}
+}
+
+// cycleMode switches to the next search mode, reporting whether there was
+// another one to switch to.
+func (v *historyView) cycleMode() bool {
+	if len(v.modes) < 2 {
+		v.status = "keyword search only: vector search needs history.embedding in " + ccrConfigPath()
+		return false
+	}
+	for i, m := range v.modes {
+		if m == v.mode {
+			v.mode = v.modes[(i+1)%len(v.modes)]
+			return true
+		}
+	}
+	v.mode = v.modes[0]
+	return true
 }
 
 // start begins searching for the typed query in the background, returning
@@ -75,7 +107,7 @@ func (v *historyView) start() tea.Cmd {
 		}
 		v.backend = b
 	}
-	mode, err := v.backend.resolveMode("")
+	mode, err := v.backend.resolveMode(v.mode)
 	if err != nil {
 		v.status = "error: " + err.Error()
 		return nil
@@ -175,6 +207,9 @@ func (m pickerModel) updateHistory(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if v.typing {
 		switch key {
+		case "tab":
+			v.cycleMode()
+			return m, nil
 		case "esc", "ctrl+c":
 			if !v.searched {
 				v.open = false // nothing to go back to
@@ -203,6 +238,11 @@ func (m pickerModel) updateHistory(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "s", "/":
 		v.typing = true
+	case "m", "tab":
+		// the same words again, ranked the other way
+		if v.cycleMode() && v.searched {
+			return m, v.start()
+		}
 	case "up", "k", "p":
 		v.move(-1, rows)
 	case "down", "j", "n":
@@ -259,7 +299,7 @@ func (v *historyView) view(width, height int) string {
 
 func (v *historyView) footer() string {
 	if v.typing {
-		return "search history: " + v.query + "▏"
+		return "search history (" + v.mode + ", tab: mode): " + v.query + "▏"
 	}
 	return v.status
 }
