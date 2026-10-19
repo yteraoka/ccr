@@ -328,6 +328,9 @@ func (h *historyDB) embedPending(ctx context.Context, e *embedder, progress func
 type historyFilter struct {
 	role string
 	cwd  string
+	// excludeSession leaves one session out: the one doing the searching,
+	// whose own recent messages would otherwise answer every query.
+	excludeSession string
 }
 
 func (f historyFilter) where(alias string) (string, []any) {
@@ -339,6 +342,10 @@ func (f historyFilter) where(alias string) (string, []any) {
 	if f.cwd != "" {
 		clause += ` AND ` + alias + `.cwd = ?`
 		args = append(args, f.cwd)
+	}
+	if f.excludeSession != "" {
+		clause += ` AND ` + alias + `.session_id != ?`
+		args = append(args, f.excludeSession)
 	}
 	return clause, args
 }

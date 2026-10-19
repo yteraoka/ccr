@@ -172,21 +172,27 @@ func hookSettingsPaths(scope string, all bool) ([]string, error) {
 	return nil, fmt.Errorf("-scope must be user, project, local or system, not %q", scope)
 }
 
-// defaultHookCommand is "ccr hook" when the ccr on PATH is this very
-// binary, and otherwise this binary by its full path, so the hook still
-// runs from a shell whose PATH does not have it.
+// defaultHookCommand is the hook command to register: ccrCommand's ccr
+// running `hook`.
 func defaultHookCommand() string {
+	return ccrCommand() + " hook"
+}
+
+// ccrCommand is how Claude Code should run ccr: "ccr" when the ccr on PATH
+// is this very binary, and otherwise this binary by its full path, so it
+// still runs from a shell whose PATH does not have it.
+func ccrCommand() string {
 	self, err := os.Executable()
 	if err != nil {
-		return "ccr hook"
+		return "ccr"
 	}
 	if onPath, err := exec.LookPath("ccr"); err == nil && sameFile(onPath, self) {
-		return "ccr hook"
+		return "ccr"
 	}
 	if strings.ContainsAny(self, " \t'\"") {
-		return `"` + self + `" hook`
+		return `"` + self + `"`
 	}
-	return self + " hook"
+	return self
 }
 
 func sameFile(a, b string) bool {

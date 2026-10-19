@@ -345,6 +345,32 @@ single character matches too. Full-width letters, half-width
 katakana and case are folded. (The index uses ccr's own tokenizer, so the
 `sqlite3` shell can read the database but not query the index.)
 
+### From Claude Code (skill)
+
+`ccr skill install` adds a [skill](https://code.claude.com/docs/en/skills)
+that lets Claude look through the history itself, in any session: when you
+say "as we discussed last time" or "前回やった修正", it searches with
+`ccr search` and reads the hits in context with `ccr show`, leaving out the
+session it is used from.
+
+```bash
+ccr skill install                    # $CLAUDE_CONFIG_DIR/skills/ccr-history/SKILL.md
+ccr skill install -scope project     # ./.claude/skills/ccr-history/SKILL.md
+sudo ccr skill install -scope system # .claude/skills in the managed settings directory
+ccr skill uninstall [-scope ...]
+```
+
+`-A`, `-command` and `-print` work as for `ccr hook install`. The skill
+lets Claude run `ccr search` and `ccr show` without asking each time.
+
+The two commands it uses are there for scripts too:
+
+```bash
+ccr search -json -exclude-session <id> <words>   # one JSON object per result: id, session_id, role, time, cwd, snippet, length
+ccr show <session_id>                            # everything recorded of a session
+ccr show -around <id> [-context n] <session_id>  # a result and the messages around it
+```
+
 ### Vector search
 
 Vector search uses [Ruri v3](https://huggingface.co/collections/cl-nagoya/ruri-v3),

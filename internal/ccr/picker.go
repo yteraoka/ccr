@@ -18,8 +18,13 @@ import (
 func PrintUsage() {
 	fmt.Fprintln(os.Stderr, `usage:
   ccr [-g] [-A] [-n]   interactive session picker (current project, or -g for every project)
-  ccr search [-g] [-l n] [-role user|assistant] [-mode hybrid|keyword|vector] <query>
+  ccr search [-g] [-l n] [-role user|assistant] [-mode hybrid|keyword|vector]
+             [-exclude-session id] [-json] <query>
                        search the prompts and answers recorded by ccr hook
+  ccr show [-around id [-context n]] [-json] <session_id>
+                       print what the history recorded of a session
+  ccr skill install|uninstall [-scope user|project|system] [-A] [-command cmd] [-print]
+                       add (or remove) the Claude Code skill that searches the history
   ccr import [-A] [-no-embed]
                        add the prompts and answers of existing transcripts to the history
   ccr hook install [-scope user|project|local|system] [-A] [-command cmd] [-print]

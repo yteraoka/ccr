@@ -262,6 +262,30 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
   結果は日時・発言者・session id(`-g` 時は cwd の basename)の行と、最初の一致
   箇所を中心にした 160 文字の抜粋(端末なら一致部分を強調)を表示します。
 
+### Claude Code の skill(`ccr skill`)
+
+- `ccr search` の `-json` は結果1件ごとに JSON(`id` / `session_id` / `role` / `time`
+  (RFC 3339、ローカル)/ `cwd` / `snippet`(一致箇所を中心にした 400 文字)/ `length`)を
+  1行ずつ、`-exclude-session <id>` はそのセッションのメッセージを結果から除きます。
+  テキスト出力のヘッダーにもメッセージ id(`#<id>`)を付けます。
+- `ccr show [-around id [-context n]] [-json] <session_id>`(オプションは session id の
+  後でもよい)は履歴 DB に記録されたそのセッションのメッセージを時刻順に、`-around` なら
+  その id の前後 n 件(既定 2)だけを、`session <id>  <cwd>` の行と各メッセージの
+  `--- #<id> <you|claude> <日時>` ヘッダー + 本文で出力します(`-around` の対象には
+  ` <<<` を付ける)。`-json` は1件ごとに id / session_id / role / time / cwd / text。
+- `ccr skill install|uninstall [-scope user|project|system] [-A] [-command cmd] [-print]`
+  は skill `ccr-history` の SKILL.md を user = `${CLAUDE_CONFIG_DIR}/skills/ccr-history/`、
+  project = カレントディレクトリの `.claude/skills/ccr-history/`、system = managed settings
+  ディレクトリの `.claude/skills/ccr-history/` に書きます/消します。SKILL.md は
+  description / when_to_use(日英の言い回し)/ `allowed-tools: Bash(<ccr> search *)
+  Bash(<ccr> show *)` を持ち、本文で `<ccr> search -json -exclude-session
+  ${CLAUDE_SESSION_ID} <words>`(必要なら `-g` / `-role` / `-mode` / `-l`)で探し、
+  `<ccr> show -around <id> <session_id>` で読み、日時と cwd を添えて答え、古い情報として
+  現在のファイルで確かめるよう指示します。`<ccr>` は hook と同じく `PATH` 上の `ccr` が
+  実行中のバイナリなら `ccr`、違えばフルパス(`-command` で指定可)。既存ファイルが
+  `---\nname: ccr-history\n` で始まらない(ccr のものでない)場合は上書きも削除もしません。
+  uninstall は空になったディレクトリも消します。
+
 ### picker からの履歴検索(`s`)
 
 - picker で `s` を押すと最下部が `search history (<mode>, tab: mode): <query>▏` のプロンプトになり、
