@@ -264,11 +264,15 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
 
 ### picker からの履歴検索(`s`)
 
-- picker で `s` を押すと最下部が `search history: <query>▏` のプロンプトになり、
+- picker で `s` を押すと最下部が `search history (<mode>, tab: mode): <query>▏` のプロンプトになり、
   Enter で検索します(kagome の読み込みや embedding に時間がかかるため、入力ごとの
   インクリメンタル検索ではなく Enter で実行し、検索はバックグラウンドで行って
   `searching…` を表示します)。対象は picker と同じくカレントディレクトリ
-  (`-g` なら全件)、モードは `ccr search` の既定、最大 100 件です。
+  (`-g` なら全件)、最大 100 件です。検索モードは `ccr search` の既定から始まり、
+  プロンプトに `search history (<mode>, tab: mode): ` として表示します。入力中の Tab、
+  結果一覧での `m` / Tab で hybrid → keyword → vector の順に切り替えます(一覧での
+  切り替えは同じクエリで即座に再検索)。設定ファイルに `history.embedding` が無ければ
+  keyword のみで、切り替えようとするとステータスにその旨を出します。
 - 画面は上(約 2/5)に `TIME / WHO / CWD / MESSAGE` の結果一覧(一致箇所を中心にした
   抜粋、一致部分を強調)と legend 行、下にカーソル位置のメッセージの session id・
   cwd・日時・発言者と全文(幅で折り返し、長い場合は最初の一致の1行前から表示)、

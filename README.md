@@ -312,11 +312,13 @@ matches. From a result:
 | `Enter` | Resume the session the message is from |
 | `i` / `v` | Open that session's `jsonl` / transcript, as in the session list |
 | `s`, `/` | Edit the query and search again |
+| `m`, `Tab` | Switch the search mode (`hybrid` → `keyword` → `vector`) and search again; `Tab` also switches it while typing the query |
 | `q`, `Esc` | Back to the session list (`s` brings the last search back) |
 
 It searches the current directory's messages, or every project's under
-`ccr -g`, with the default mode (`hybrid` when an embedding model is
-configured).
+`ccr -g`. The prompt shows the search mode, which starts at the default
+(`hybrid` when an embedding model is configured; without one, `keyword` is
+the only mode).
 
 The history outlives the transcripts: when a session's jsonl has been
 deleted, the preview says `Transcript: gone`, and `v` still shows the

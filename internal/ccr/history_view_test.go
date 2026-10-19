@@ -1,6 +1,7 @@
 package ccr
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -173,5 +174,53 @@ func TestHistoryScreenKnowsDeletedTranscripts(t *testing.T) {
 		if !strings.Contains(pm.history.status, "transcript is gone") {
 			t.Errorf("%v: status = %q", key, pm.history.status)
 		}
+	}
+}
+
+func TestHistoryScreenSwitchesSearchMode(t *testing.T) {
+	sessionTranscripts(t, "s1")
+	cfg, _ := fakeEmbeddings(t)
+	data, _ := json.Marshal(fileConfig{History: historyConfig{Embedding: cfg}})
+	writeCCRConfig(t, string(data))
+	historyFixture(t, historyMessage{sessionID: "s1", role: "user", text: "abc hook"})
+
+	m := openHistory(t)
+	if v := m.(pickerModel).history; v.mode != searchHybrid || !strings.Contains(v.footer(), "(hybrid") {
+		t.Fatalf("default mode = %q, footer %q", v.mode, v.footer())
+	}
+	// tab while typing switches the mode, and types nothing
+	m = typeKeys(t, m, "hook")
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if v := m.(pickerModel).history; v.mode != searchKeyword || v.query != "hook" || !v.typing {
+		t.Fatalf("after tab: mode %q, query %q, typing %v", v.mode, v.query, v.typing)
+	}
+	pm := runSearch(t, m)
+	if !strings.Contains(pm.history.status, "(keyword)") || len(pm.history.results) != 1 {
+		t.Errorf("keyword search: status %q, %d results", pm.history.status, len(pm.history.results))
+	}
+
+	// m on the results switches and searches again at once
+	updated, cmd := pm.Update(tea.KeyPressMsg{Code: 'm', Text: "m"})
+	if cmd == nil || updated.(pickerModel).history.mode != searchVector {
+		t.Fatalf("m: mode %q, search started %v", updated.(pickerModel).history.mode, cmd != nil)
+	}
+	updated, _ = updated.Update(cmd())
+	if v := updated.(pickerModel).history; !strings.Contains(v.status, "(vector)") || len(v.results) != 1 {
+		t.Errorf("vector search: status %q, %d results", v.status, len(v.results))
+	}
+	// and round again to hybrid
+	updated, _ = updated.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if got := updated.(pickerModel).history.mode; got != searchHybrid {
+		t.Errorf("mode after vector = %q, want hybrid", got)
+	}
+}
+
+func TestHistoryScreenModeWithoutEmbedding(t *testing.T) {
+	historyFixture(t)
+	m := openHistory(t)
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	v := m.(pickerModel).history
+	if v.mode != searchKeyword || !strings.Contains(v.status, "vector search needs history.embedding") {
+		t.Errorf("tab without an embedding model: mode %q, status %q", v.mode, v.status)
 	}
 }
