@@ -264,7 +264,7 @@ UserPromptSubmit の stdout は会話に追加されるため、hook は stdout 
 
 ### picker からの履歴検索(`s`)
 
-- picker で `s` を押すと最下部が `search history: <query>▏` のプロンプトになり、
+- picker で `s` を押すと最下部が `search history (<mode>, tab: mode): <query>▏` のプロンプトになり、
   Enter で検索します(kagome の読み込みや embedding に時間がかかるため、入力ごとの
   インクリメンタル検索ではなく Enter で実行し、検索はバックグラウンドで行って
   `searching…` を表示します)。対象は picker と同じくカレントディレクトリ
