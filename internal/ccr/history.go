@@ -1,6 +1,7 @@
 package ccr
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/term"
@@ -147,8 +149,10 @@ func RunSearch(args []string) error {
 	limit := fs.Int("l", 10, "number of results")
 	role := fs.String("role", "", `only "user" prompts or "assistant" answers`)
 	mode := fs.String("mode", "", `"hybrid" (default with an embedding model), "keyword" or "vector"`)
+	exclude := fs.String("exclude-session", "", "leave out the messages of this session (the one asking, say)")
+	asJSON := fs.Bool("json", false, "print one JSON object per result, for programs (and Claude) to read")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: ccr search [-g] [-l n] [-role user|assistant] [-mode hybrid|keyword|vector] <query>")
+		fmt.Fprintln(os.Stderr, "usage: ccr search [-g] [-l n] [-role user|assistant] [-mode hybrid|keyword|vector] [-exclude-session id] [-json] <query>")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -174,7 +178,7 @@ func RunSearch(args []string) error {
 		return err
 	}
 
-	req := historyRequest{query: query, mode: *mode, filter: historyFilter{role: *role}, limit: *limit}
+	req := historyRequest{query: query, mode: *mode, filter: historyFilter{role: *role, excludeSession: *exclude}, limit: *limit}
 	if !*global {
 		if req.filter.cwd, err = os.Getwd(); err != nil {
 			return err
@@ -195,6 +199,14 @@ func RunSearch(args []string) error {
 	if len(results) == 0 {
 		fmt.Fprintln(os.Stderr, "no matches")
 		return nil
+	}
+	if *asJSON {
+		out, err := formatSearchResultsJSON(results, query)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(out)
+		return err
 	}
 	_, err = io.WriteString(os.Stdout, formatSearchResults(results, query, *global, term.IsTerminal(os.Stdout.Fd())))
 	return err
@@ -309,9 +321,47 @@ func vectorRanking(ctx context.Context, h *historyDB, e *embedder, query string,
 // snippetRunes is how much of a message a search result shows.
 const snippetRunes = 160
 
+// jsonSnippetRunes is how much of a message a JSON result carries: more
+// than the terminal shows, as its reader is a program (or Claude) that can
+// take it in, but still a snippet; `ccr show` gives the whole text.
+const jsonSnippetRunes = 400
+
+// searchResultJSON is one line of `ccr search -json`.
+type searchResultJSON struct {
+	ID        int64  `json:"id"`
+	SessionID string `json:"session_id"`
+	Role      string `json:"role"` // "user" (the person) or "assistant" (Claude)
+	Time      string `json:"time"` // RFC 3339, local time
+	Cwd       string `json:"cwd,omitempty"`
+	Snippet   string `json:"snippet"`
+	Length    int    `json:"length"` // of the whole text, in characters
+}
+
+// formatSearchResultsJSON renders results as JSON Lines, best first.
+func formatSearchResultsJSON(results []historyMessage, query string) ([]byte, error) {
+	terms := searchTerms(query)
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	for _, m := range results {
+		if err := enc.Encode(searchResultJSON{
+			ID:        m.id,
+			SessionID: m.sessionID,
+			Role:      m.role,
+			Time:      m.createdAt.Local().Format(time.RFC3339),
+			Cwd:       m.cwd,
+			Snippet:   snippet(m.text, terms, jsonSnippetRunes, false),
+			Length:    utf8.RuneCountInString(m.text),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return b.Bytes(), nil
+}
+
 // formatSearchResults renders one header line and one snippet line per
 // result. The header carries the full session id, to hand to
-// `claude --resume`.
+// `claude --resume`, and the message id, to hand to `ccr show -around`.
 func formatSearchResults(results []historyMessage, query string, showCwd, color bool) string {
 	var b strings.Builder
 	terms := searchTerms(query)
@@ -319,7 +369,7 @@ func formatSearchResults(results []historyMessage, query string, showCwd, color 
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		header := fmt.Sprintf("%s  %-6s  %s", m.createdAt.Local().Format("2006-01-02 15:04"), roleLabel(m.role), m.sessionID)
+		header := fmt.Sprintf("%s  %-6s  %s  #%d", m.createdAt.Local().Format("2006-01-02 15:04"), roleLabel(m.role), m.sessionID, m.id)
 		if showCwd && m.cwd != "" {
 			header += "  " + filepath.Base(m.cwd)
 		}

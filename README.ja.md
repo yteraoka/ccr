@@ -335,6 +335,31 @@ transcript そのものが必要なので使えません。
 違いは区別しません(索引は ccr 独自の tokenizer で作るため、`sqlite3` コマンドで
 データベースは読めますが索引の検索はできません)。
 
+### Claude Code から使う(skill)
+
+`ccr skill install` で [skill](https://code.claude.com/docs/en/skills) を登録すると、
+どのセッションでも Claude が自分で履歴を探せるようになります。「前回やった修正」
+「この前話した件」などと言うと、`ccr search` で検索し、見つかったものを `ccr show` で
+前後のやりとりと一緒に読みます(使っているセッション自身は検索対象から外します)。
+
+```bash
+ccr skill install                    # $CLAUDE_CONFIG_DIR/skills/ccr-history/SKILL.md
+ccr skill install -scope project     # ./.claude/skills/ccr-history/SKILL.md
+sudo ccr skill install -scope system # managed settings ディレクトリの .claude/skills
+ccr skill uninstall [-scope ...]
+```
+
+`-A`、`-command`、`-print` は `ccr hook install` と同じです。skill は Claude が
+`ccr search` と `ccr show` を毎回確認なしで実行できるようにします。
+
+skill が使う2つのコマンドはスクリプトからも使えます:
+
+```bash
+ccr search -json -exclude-session <id> <語>      # 1件ごとに JSON(id、session_id、role、time、cwd、snippet、length)
+ccr show <session_id>                            # そのセッションで記録された全体
+ccr show -around <id> [-context n] <session_id>  # 検索結果のメッセージとその前後
+```
+
 ### ベクトル検索
 
 ベクトル検索の既定のモデルは日本語の embedding モデル
