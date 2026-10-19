@@ -1,5 +1,10 @@
 # Changelog
 
+## [v3.3.0](https://github.com/yteraoka/ccr/compare/v3.2.0...v3.3.0) - 2026-10-19
+
+- Let the history search screen switch the search mode by @yteraoka in https://github.com/yteraoka/ccr/pull/108
+- Add a Claude Code skill that searches the conversation history by @yteraoka in https://github.com/yteraoka/ccr/pull/110
+
 ## [v3.2.0](https://github.com/yteraoka/ccr/compare/v3.1.0...v3.2.0) - 2026-10-18
 
 - Install the CPU-only PyTorch for the Ruri v3 server on Linux by @yteraoka in https://github.com/yteraoka/ccr/pull/105
