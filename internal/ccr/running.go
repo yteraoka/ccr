@@ -36,21 +36,29 @@ func parsePidFile(path string) (sessionPidRecord, error) {
 	return rec, nil
 }
 
+// procRoot is where procfs is expected to be mounted. It is a package
+// variable so tests can point it at a fake tree (or a missing directory to
+// emulate platforms without procfs).
+var procRoot = "/proc"
+
 // isClaudeProcess reports whether pid is a currently running claude
 // process. It is a package variable so tests can stub it out.
 var isClaudeProcess = func(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	comm, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "comm"))
-	if err == nil {
+	// Only trust a missing /proc/<pid> as "process gone" when procfs itself
+	// is present. On platforms without it (e.g. macOS) every read fails
+	// with ENOENT, which must not be mistaken for a dead process.
+	if _, err := os.Stat(filepath.Join(procRoot, "self")); err == nil {
+		comm, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(pid), "comm"))
+		if err != nil {
+			return false
+		}
 		return strings.TrimSpace(string(comm)) == "claude"
 	}
-	if os.IsNotExist(err) {
-		return false
-	}
 
-	// /proc is unavailable on this platform (e.g. macOS): fall back to a
+	// procfs is unavailable on this platform (e.g. macOS): fall back to a
 	// liveness-only check, since we can't inspect the command name.
 	proc, err := os.FindProcess(pid)
 	if err != nil {
