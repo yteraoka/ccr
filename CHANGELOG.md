@@ -1,5 +1,10 @@
 # Changelog
 
+## [v3.4.0](https://github.com/yteraoka/ccr/compare/v3.3.0...v3.4.0) - 2026-10-21
+
+- Update dependency go to v1.27.3 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/111
+- Fix running session detection on platforms without procfs by @yteraoka in https://github.com/yteraoka/ccr/pull/113
+
 ## [v3.3.0](https://github.com/yteraoka/ccr/compare/v3.2.0...v3.3.0) - 2026-10-19
 
 - Let the history search screen switch the search mode by @yteraoka in https://github.com/yteraoka/ccr/pull/108
