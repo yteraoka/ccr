@@ -84,3 +84,46 @@ func TestLoadRunningSessionPIDsMissingDir(t *testing.T) {
 		t.Fatalf("expected empty map, got %+v", pids)
 	}
 }
+
+func TestIsClaudeProcessProcfs(t *testing.T) {
+	root := t.TempDir()
+	writeComm := func(pid, comm string) {
+		if err := os.MkdirAll(filepath.Join(root, pid), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, pid, "comm"), []byte(comm+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "self"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeComm("100", "claude")
+	writeComm("200", "bash")
+
+	orig := procRoot
+	procRoot = root
+	defer func() { procRoot = orig }()
+
+	if !isClaudeProcess(100) {
+		t.Error("pid 100 (comm claude) should be a claude process")
+	}
+	if isClaudeProcess(200) {
+		t.Error("pid 200 (comm bash) should not be a claude process")
+	}
+	if isClaudeProcess(300) {
+		t.Error("pid 300 (no /proc entry) should not be a claude process")
+	}
+}
+
+// Without procfs (e.g. macOS), a live pid must still be reported as running
+// instead of being treated as gone because /proc/<pid>/comm is missing.
+func TestIsClaudeProcessWithoutProcfs(t *testing.T) {
+	orig := procRoot
+	procRoot = filepath.Join(t.TempDir(), "no-proc")
+	defer func() { procRoot = orig }()
+
+	if !isClaudeProcess(os.Getpid()) {
+		t.Error("own pid should be reported as live when procfs is unavailable")
+	}
+}
