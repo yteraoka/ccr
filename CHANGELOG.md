@@ -1,5 +1,9 @@
 # Changelog
 
+## [v3.4.1](https://github.com/yteraoka/ccr/compare/v3.4.0...v3.4.1) - 2026-10-23
+
+- Update Songmu/tagpr action to v1.21.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/114
+
 ## [v3.4.0](https://github.com/yteraoka/ccr/compare/v3.3.0...v3.4.0) - 2026-10-21
 
 - Update dependency go to v1.27.3 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/111
