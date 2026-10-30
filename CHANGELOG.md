@@ -1,5 +1,12 @@
 # Changelog
 
+## [v3.4.1](https://github.com/yteraoka/ccr/compare/v3.4.0...v3.4.1) - 2026-10-30
+
+- Update Songmu/tagpr action to v1.21.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/114
+- Update module charm.land/bubbletea/v2 to v2.1.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/116
+- Update module github.com/ncruces/go-sqlite3 to v0.36.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/117
+- Update module github.com/yuin/goldmark to v1.8.7 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/118
+
 ## [v3.4.0](https://github.com/yteraoka/ccr/compare/v3.3.0...v3.4.0) - 2026-10-21
 
 - Update dependency go to v1.27.3 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/111
