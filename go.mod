@@ -12,7 +12,7 @@ require (
 	github.com/ikawaha/kagome/v2 v2.11.0
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/ncruces/go-sqlite3 v0.36.0
-	github.com/yuin/goldmark v1.8.6
+	github.com/yuin/goldmark v1.8.7
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
 	golang.org/x/text v0.43.0
 )
