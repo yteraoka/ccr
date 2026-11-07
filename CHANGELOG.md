@@ -1,5 +1,9 @@
 # Changelog
 
+## [v3.4.2](https://github.com/yteraoka/ccr/compare/v3.4.1...v3.4.2) - 2026-11-07
+
+- Update module github.com/ncruces/go-sqlite3 to v0.37.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/120
+
 ## [v3.4.1](https://github.com/yteraoka/ccr/compare/v3.4.0...v3.4.1) - 2026-11-03
 
 - Update Songmu/tagpr action to v1.21.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/114
