@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/ikawaha/kagome-dict/ipa v1.2.6
-	github.com/ikawaha/kagome/v2 v2.11.0
+	github.com/ikawaha/kagome/v2 v2.11.1
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/ncruces/go-sqlite3 v0.37.0
 	github.com/yuin/goldmark v1.8.7
