@@ -1,5 +1,13 @@
 # Changelog
 
+## [v3.4.2](https://github.com/yteraoka/ccr/compare/v3.4.1...v3.4.2) - 2026-11-11
+
+- Update module github.com/ncruces/go-sqlite3 to v0.37.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/120
+- Update module golang.org/x/text to v0.44.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/123
+- Update module charm.land/lipgloss/v2 to v2.1.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/122
+- Update dependency go to v1.27.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/124
+- Update module github.com/ikawaha/kagome/v2 to v2.11.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/126
+
 ## [v3.4.1](https://github.com/yteraoka/ccr/compare/v3.4.0...v3.4.1) - 2026-11-03
 
 - Update Songmu/tagpr action to v1.21.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/114
