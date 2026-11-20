@@ -77,7 +77,24 @@ Enter で選択したセッションの cwd に移動して
 exec で `claude --resume <session_id>` を実行します。移動先の cwd に `.envrc` が
 あり `direnv` が PATH 上にあれば、`direnv exec <cwd> claude --resume <session_id>`
 経由で実行し、その環境を読み込みます(direnv 自身が claude に exec するため
-余計なプロセスは残りません)。`v` で選択中セッションの jsonl 全体を Human/AI が
+余計なプロセスは残りません)。セッションの cwd が既に存在しない場合(一時的な作業
+フォルダが削除された場合など)は、プレビューの `Directory:` のパスの前に `(gone)` を添え、
+Enter で resume する代わりに最下部を再開先フォルダの入力プロンプトにします
+(初期値は ccr のカレントディレクトリ。Tab でディレクトリ名を補完(隠し
+ディレクトリは `.` を入力したときのみ)、Ctrl-U で消去、Ctrl-W で最後の要素を削除、
+Esc / Ctrl-C で取り消し)。Enter で確定すると `~` / `$VAR` を展開し、相対パスは
+ccr のカレントディレクトリ基準、symlink を解決した上で、ディレクトリでなければ
+プロンプトにエラーを出して入力を続けます。実行中のセッション(PID がある)も
+移動しません。確定したら、セッションの `<session_id>.jsonl` とその横の
+`<session_id>/`(subagents や tool-results)を同じ config ディレクトリの
+`projects/<新しい cwd の encoded_cwd>/` へ rename で移動し(移動先に既にあれば
+エラーにして何も動かさない。ディレクトリの移動に失敗したら jsonl を戻す)、
+空になった元の project ディレクトリを削除して、新しい cwd で resume します。
+移動後も jsonl の既存の行の `cwd` は元のフォルダのままなので、セッションの cwd は
+「ファイルが置かれた project ディレクトリ名と encode 結果が一致する最後の `cwd`、
+一致するものが無ければ最初の `cwd`」とします(一覧・プレビュー・HTML で共通)。
+履歴検索の画面からの resume も、記録された cwd ではなく transcript から
+この規則で求めた cwd を使い、同じく無ければ再開先を尋ねます。`v` で選択中セッションの jsonl 全体を Human/AI が
 見やすく区別された自己完結 HTML(light 基調の配色、Markdown レンダリング、コマンド
 実行結果や diff の syntax highlight 付き)として表示するページを `$BROWSER` で
 開きます(`$BROWSER` が未設定の場合、macOS では `open` コマンドにフォールバック

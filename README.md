@@ -113,6 +113,21 @@ The terminal splits into two panes:
 - `CCR_NO_BROWSER` — set it to `1` (anything but `0`, `false`, `no`, or `off`) to make `v` show the transcript URL instead of opening a browser, the same as passing `-n`.
 - If a `.envrc` file exists in the destination directory, it is loaded via `direnv exec`.
 
+### When the session's directory is gone
+
+A session started in a scratch folder that has since been deleted cannot
+be resumed where it ran. The preview marks such a directory `(gone)`, and
+`Enter` asks for another folder instead, starting from the directory ccr
+was run in (`Tab` completes a directory name, `Ctrl-U` clears the line,
+`Ctrl-W` deletes the last path element, `Esc` cancels). ccr then moves the
+session's files — `<session_id>.jsonl` and the `<session_id>/` directory
+holding its sub agents' transcripts and tool results — from
+`${CLAUDE_CONFIG_DIR}/projects/<old project>/` to the new folder's project
+directory, removes the old project directory if that leaves it empty, and
+resumes there. Nothing is overwritten: if the destination already holds
+the session, ccr says so and leaves both alone. The same applies to
+`Enter` on the history search screen.
+
 ## Inspecting the raw `jsonl` (`i`)
 
 Pressing `i` opens the selected session's file in a full-screen viewer,

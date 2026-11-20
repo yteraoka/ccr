@@ -30,6 +30,8 @@ const keyLegend = "j/k/n/p: move  space/b: page  /: filter  s: history  enter: r
 type previewData struct {
 	sessionID string
 	cwd       string
+	// cwdGone says cwd no longer exists, so Enter asks where to resume.
+	cwdGone bool
 	// configDir is the config directory the session was found in, shown
 	// only when sessions are listed from more than one.
 	configDir  string
@@ -71,6 +73,10 @@ type pickerModel struct {
 
 	statusMsg string
 
+	// relocate is the prompt asking where to resume a session whose
+	// directory is gone, while it is open.
+	relocate *relocatePrompt
+
 	// noBrowser keeps v from shelling out to a browser, showing the
 	// transcript URL in the status line instead. Its zero value is the
 	// normal behavior, so a picker built without it still opens a browser.
@@ -105,6 +111,17 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
+		if m.relocate != nil {
+			entry, done, ok := m.relocate.key(msg.String(), msg.Text)
+			switch {
+			case ok:
+				m.relocate, m.selected = nil, entry
+				return m, tea.Quit
+			case done:
+				m.relocate = nil
+			}
+			return m, nil
+		}
 		if m.viewer != nil {
 			if m.viewer.update(msg.String(), msg.Text, m.viewWidth(), m.viewHeight()) {
 				m.viewer = nil
@@ -157,8 +174,7 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			m.selected = session
-			return m, tea.Quit
+			return m.resume(session)
 		case "i":
 			session, ok := m.current()
 			if !ok {
@@ -179,6 +195,19 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// resume ends the picker on entry, to be resumed, unless the directory it
+// ran in is gone: then it first asks for another one to move it to.
+func (m pickerModel) resume(entry sessionEntry) (tea.Model, tea.Cmd) {
+	if entry.cwd != "" && !dirExists(entry.cwd) {
+		if path, err := lookupSessionFile(entry.id); err == nil {
+			m.relocate = newRelocatePrompt(entry, path)
+			return m, nil
+		}
+	}
+	m.selected = entry
+	return m, tea.Quit
 }
 
 // openTranscript serves sessionID's transcript and opens it in a browser
@@ -238,6 +267,7 @@ func (m *pickerModel) loadPreview() {
 	m.preview = previewData{
 		sessionID:  id,
 		cwd:        parsed.cwd,
+		cwdGone:    parsed.cwd != "" && !dirExists(parsed.cwd),
 		configDir:  configDir,
 		size:       info.Size(),
 		aiTitle:    parsed.aiTitle,
@@ -365,6 +395,9 @@ func (m *pickerModel) moveCursor(delta int) {
 // footerLine is the bottom line of the picker: the search prompt while one
 // is running, and otherwise whatever status there is to report.
 func (m pickerModel) footerLine() string {
+	if m.relocate != nil {
+		return m.relocate.prompt(m.viewWidth())
+	}
 	if m.search.showsPrompt() {
 		return m.search.prompt(len(m.rows()), len(m.sessions))
 	}
@@ -380,7 +413,11 @@ func (m pickerModel) View() tea.View {
 		return v
 	}
 	if m.history != nil && m.history.open {
-		v := tea.NewView(m.history.view(width, height))
+		footer := ""
+		if m.relocate != nil {
+			footer = m.relocate.prompt(width)
+		}
+		v := tea.NewView(m.history.view(width, height, footer))
 		v.AltScreen = true
 		return v
 	}
@@ -483,9 +520,14 @@ func previewView(p previewData, height, width int) string {
 
 	// The list shortens the session id on narrow terminals, so the preview
 	// always carries the full one.
+	// "(gone)" goes before the path so a long one cannot truncate it away
+	directory := "Directory: " + p.cwd
+	if p.cwdGone {
+		directory = "Directory: (gone) " + p.cwd
+	}
 	lines := []string{
 		truncate("Session: "+p.sessionID, width),
-		truncate("Directory: "+p.cwd, width),
+		truncate(directory, width),
 	}
 	if p.configDir != "" {
 		lines = append(lines, truncate("Config: "+p.configDir, width))

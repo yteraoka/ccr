@@ -154,7 +154,8 @@ func TestTruncateLongStringCutWithEllipsis(t *testing.T) {
 }
 
 func TestViewProducesListAndPreview(t *testing.T) {
-	setupPreviewFixture(t, "session-a", "/tmp/proj-a")
+	cwd := t.TempDir() // an existing directory, so the preview has nothing to flag
+	setupPreviewFixture(t, "session-a", cwd)
 	m := newPickerModel([]sessionEntry{{id: "session-a"}})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(pickerModel)
@@ -163,7 +164,7 @@ func TestViewProducesListAndPreview(t *testing.T) {
 	if !strings.Contains(got, "SESSION ID") {
 		t.Errorf("View() = %q, want the list header", got)
 	}
-	if !strings.Contains(got, "Directory: /tmp/proj-a") {
+	if !strings.Contains(got, "Directory: "+cwd) {
 		t.Errorf("View() = %q, want the preview pane", got)
 	}
 }

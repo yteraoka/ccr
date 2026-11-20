@@ -71,7 +71,14 @@ func sessionTranscripts(t *testing.T, ids ...string) {
 }
 
 func TestHistoryScreenSearchesAndResumes(t *testing.T) {
-	sessionTranscripts(t, "s1", "s2", "s3")
+	// the transcripts say where the sessions are now, which wins over the
+	// directory the history recorded (a moved session's is stale)
+	cfg, work := t.TempDir(), t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", cfg)
+	for _, id := range []string{"s1", "s2", "s3"} {
+		writeTranscript(t, filepath.Join(cfg, "projects", encodeProjectDir(work), id+".jsonl"),
+			`{"type":"user","cwd":`+quoteJSON(work)+`,"timestamp":"2026-01-01T00:00:00Z","message":{"content":"q"}}`)
+	}
 	historyFixture(t,
 		historyMessage{sessionID: "s1", role: "user", cwd: "/work/a", configDir: "/cfg-a", text: "全文検索を日本語に対応させたい", createdAt: time.Now().Add(-time.Hour)},
 		historyMessage{sessionID: "s2", role: "assistant", cwd: "/work/b", text: "日本語の検索には bigram を使います"},
@@ -101,7 +108,7 @@ func TestHistoryScreenSearchesAndResumes(t *testing.T) {
 	cur, _ := updated.(pickerModel).history.current()
 	updated, cmd = updated.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got := updated.(pickerModel).selected
-	if want := (sessionEntry{id: cur.sessionID, cwd: cur.cwd, configDir: cur.configDir}); got != want || cmd == nil {
+	if want := (sessionEntry{id: cur.sessionID, cwd: work, configDir: cur.configDir}); got != want || cmd == nil {
 		t.Errorf("selected %+v (cmd %v), want %+v and quit", got, cmd != nil, want)
 	}
 }
