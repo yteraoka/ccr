@@ -88,12 +88,15 @@ func (r *relocatePrompt) prompt(width int) string {
 	if r.err != nil {
 		label = "error: " + r.err.Error() + ": "
 	}
-	room := width - runewidth.StringWidth(label) - 1 // the cursor
+	if line := label + r.input + "▏"; runewidth.StringWidth(line) <= width {
+		return line
+	}
+	room := width - runewidth.StringWidth(label) - 1 // the "…"
 	if room < 8 {
 		return truncate(label+r.input+"▏", width)
 	}
 	in := []rune(r.input + "▏")
-	for runewidth.StringWidth(string(in))+1 > room && len(in) > 1 {
+	for runewidth.StringWidth(string(in)) > room && len(in) > 1 {
 		in = in[1:]
 	}
 	return label + "…" + string(in)
@@ -223,9 +226,15 @@ func completeDir(input string) string {
 	if len(names) == 1 {
 		common += string(filepath.Separator)
 	}
-	// the typed prefix is the tail of input as well as of expanded (only a
-	// leading ~ or $VAR changes), so input keeps the way it was written
-	return input[:len(input)-len(prefix)] + common
+	// When the last element was typed as is, input keeps the way it was
+	// written (~ or $VARS before it stay). When the element itself came
+	// from a $VAR, input has no part to keep the completion against, so
+	// it gives way to the expanded path.
+	tail := input[strings.LastIndexByte(input, filepath.Separator)+1:]
+	if tail == prefix {
+		return input[:len(input)-len(prefix)] + common
+	}
+	return expanded[:len(expanded)-len(prefix)] + common
 }
 
 // dropLastPathElement removes the last element of a typed path, keeping

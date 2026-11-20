@@ -289,3 +289,65 @@ func TestHistoryScreenEnterOnGoneDirectoryAsksWhere(t *testing.T) {
 		t.Errorf("selected %+v, cmd %v", pm.selected, cmd != nil)
 	}
 }
+
+func TestCompleteDirWithAVariableAsTheLastElement(t *testing.T) {
+	root := t.TempDir()
+	long := filepath.Join(root, "a-much-longer-name")
+	for _, d := range []string{long, filepath.Join(long, "inner")} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("D", long)
+	t.Setenv("S", "a-much")
+	sep := string(filepath.Separator)
+	for in, want := range map[string]string{
+		// the element is longer expanded than typed: this used to panic
+		"$D": long + sep,
+		// the element is shorter expanded than typed: this used to cut $S
+		root + sep + "$S": long + sep,
+		// a $VAR before the last element stays as typed
+		"$D" + sep + "in": "$D" + sep + "inner" + sep,
+	} {
+		if got := completeDir(in); got != want {
+			t.Errorf("completeDir(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRelocatePromptAddsNoEllipsisWhenTheShortLabelFits(t *testing.T) {
+	r := &relocatePrompt{entry: sessionEntry{cwd: "/a/rather/long/directory/that/is/gone"}, input: "/tmp/new"}
+	got := r.prompt(40)
+	if got != "resume in: /tmp/new▏" {
+		t.Errorf("prompt = %q, want the whole path with nothing marked as cut", got)
+	}
+	r.input = "/very/long/path/that/does/not/fit/the/line/target"
+	if got := r.prompt(40); ansi.StringWidth(got) != 40 {
+		t.Errorf("cut prompt = %q is %d columns, want the line filled to 40", got, ansi.StringWidth(got))
+	}
+}
+
+func TestHistoryScreenRefusesToMoveARunningSession(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", cfg)
+	path, cwd := goneSession(t, cfg, "s1")
+	writeTranscript(t, filepath.Join(cfg, "sessions", "111.json"), `{"pid":111,"sessionId":"s1"}`)
+	orig := isClaudeProcess
+	isClaudeProcess = func(pid int) bool { return pid == 111 }
+	t.Cleanup(func() { isClaudeProcess = orig })
+	historyFixture(t, historyMessage{sessionID: "s1", role: "user", cwd: cwd, text: "scratch work"})
+
+	m := runSearch(t, typeKeys(t, openHistory(t), "scratch"))
+	updated, _ := m.Update(press(tea.KeyEnter))
+	if pm := updated.(pickerModel); pm.relocate == nil || pm.relocate.entry.pid != 111 {
+		t.Fatalf("relocate = %+v, want the running pid carried over", pm.relocate)
+	}
+	updated, cmd := updated.Update(press(tea.KeyEnter))
+	pm := updated.(pickerModel)
+	if pm.relocate == nil || pm.relocate.err == nil || !strings.Contains(pm.relocate.err.Error(), "running") || cmd != nil {
+		t.Fatalf("relocate %+v, cmd %v", pm.relocate, cmd != nil)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("a running session was moved: %v", err)
+	}
+}

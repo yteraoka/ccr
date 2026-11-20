@@ -271,6 +271,12 @@ func (m pickerModel) updateHistory(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				if cwd, _, _, err := readSessionSummary(path); err == nil && cwd != "" {
 					entry.cwd = cwd
 				}
+				// a running session must not be moved, and unlike the
+				// picker's rows the history knows nothing of what runs; the
+				// claude running it records itself in the config directory
+				// the transcript is in (<dir>/projects/<project>/<id>.jsonl)
+				dir := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+				entry.pid = loadRunningSessionPIDs(sessionsDir(dir))[r.sessionID]
 			}
 			return m.resume(entry)
 		}
