@@ -49,7 +49,7 @@ type sessionInfo struct {
 }
 
 // parseSessionInfo scans a session JSONL file and extracts:
-//   - cwd: from the first line containing a non-empty "cwd" field
+//   - cwd: the session's directory, chosen by cwdChooser
 //   - aiTitle: the value of "aiTitle" from the last line where
 //     type == "ai-title"
 //   - prompts: lastPrompt from up to the last 3 lines where
@@ -70,6 +70,7 @@ func parseSessionInfo(path string) (sessionInfo, error) {
 	defer f.Close() //nolint:errcheck
 
 	seen := make(map[string]bool)
+	cwds := newCwdChooser(path)
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -82,9 +83,7 @@ func parseSessionInfo(path string) (sessionInfo, error) {
 			continue
 		}
 
-		if info.cwd == "" && rec.Cwd != "" {
-			info.cwd = rec.Cwd
-		}
+		cwds.add(rec.Cwd)
 		if rec.Type == "ai-title" && rec.AiTitle != "" {
 			info.aiTitle = rec.AiTitle
 		}
@@ -115,6 +114,7 @@ func parseSessionInfo(path string) (sessionInfo, error) {
 		return sessionInfo{}, err
 	}
 
+	info.cwd = cwds.cwd()
 	if len(info.prompts) > 3 {
 		info.prompts = info.prompts[len(info.prompts)-3:]
 	}

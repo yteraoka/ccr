@@ -93,8 +93,48 @@ func encodeProjectDir(path string) string {
 	return nonAlnumPattern.ReplaceAllString(path, "-")
 }
 
+// cwdChooser picks, from the "cwd" fields of a session file's lines, the
+// directory the session belongs to: the last one that encodes to the name of
+// the project directory the file sits in, falling back to the first one when
+// none does. A session moved to another folder (see relocateSession) keeps
+// its old lines, whose cwd is the folder that is gone, so the first cwd alone
+// would point back there; the project directory is what claude --resume
+// finds the session by, so the cwd matching it is where to resume. A session
+// that never moved has its original cwd matching, and a later line whose cwd
+// wandered elsewhere does not.
+type cwdChooser struct {
+	project string
+	first   string
+	matched string
+	last    string // the cwd checked last, to skip re-encoding repeats
+}
+
+func newCwdChooser(path string) cwdChooser {
+	return cwdChooser{project: filepath.Base(filepath.Dir(path))}
+}
+
+func (c *cwdChooser) add(cwd string) {
+	if cwd == "" || cwd == c.last {
+		return
+	}
+	c.last = cwd
+	if c.first == "" {
+		c.first = cwd
+	}
+	if encodeProjectDir(cwd) == c.project {
+		c.matched = cwd
+	}
+}
+
+func (c cwdChooser) cwd() string {
+	if c.matched != "" {
+		return c.matched
+	}
+	return c.first
+}
+
 // readSessionSummary scans a session file for the fields a list row needs:
-// the cwd recorded in the first line that has a non-empty "cwd" field, the
+// the session's cwd (see cwdChooser), the
 // session's cumulative token usage (summed across every assistant message
 // and de-duplicated by message id), and the last successfully parsed
 // "timestamp" field found in the file (zero value if none found).
@@ -106,6 +146,7 @@ func readSessionSummary(path string) (cwd string, usage tokenUsage, lastTimestam
 	defer f.Close() //nolint:errcheck
 
 	seen := make(map[string]bool)
+	cwds := newCwdChooser(path)
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 10*1024*1024)
 	for scanner.Scan() {
@@ -117,9 +158,7 @@ func readSessionSummary(path string) (cwd string, usage tokenUsage, lastTimestam
 		if err := json.Unmarshal(line, &rec); err != nil {
 			continue
 		}
-		if cwd == "" && rec.Cwd != "" {
-			cwd = rec.Cwd
-		}
+		cwds.add(rec.Cwd)
 		addTokens(seen, rec, &usage)
 		if rec.Timestamp != "" {
 			if t, err := time.Parse(time.RFC3339, rec.Timestamp); err == nil {
@@ -127,5 +166,5 @@ func readSessionSummary(path string) (cwd string, usage tokenUsage, lastTimestam
 			}
 		}
 	}
-	return cwd, usage, lastTimestamp, scanner.Err()
+	return cwds.cwd(), usage, lastTimestamp, scanner.Err()
 }

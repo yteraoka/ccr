@@ -263,8 +263,22 @@ func (m pickerModel) updateHistory(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				v.status = "this session's transcript is gone, so it cannot be resumed (v shows what the history kept)"
 				return m, nil
 			}
-			m.selected = sessionEntry{id: r.sessionID, cwd: r.cwd, configDir: r.configDir}
-			return m, tea.Quit
+			// the transcript knows where a moved session went; the
+			// history keeps the directory each message was recorded in
+			entry := sessionEntry{id: r.sessionID, cwd: r.cwd, configDir: r.configDir}
+			rememberConfigDir(r.configDir)
+			if path, err := lookupSessionFile(r.sessionID); err == nil {
+				if cwd, _, _, err := readSessionSummary(path); err == nil && cwd != "" {
+					entry.cwd = cwd
+				}
+				// a running session must not be moved, and unlike the
+				// picker's rows the history knows nothing of what runs; the
+				// claude running it records itself in the config directory
+				// the transcript is in (<dir>/projects/<project>/<id>.jsonl)
+				dir := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+				entry.pid = loadRunningSessionPIDs(sessionsDir(dir))[r.sessionID]
+			}
+			return m.resume(entry)
 		}
 	case "i":
 		if r, ok := v.current(); ok {
@@ -288,13 +302,17 @@ func (m pickerModel) updateHistory(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// view draws the history screen.
-func (v *historyView) view(width, height int) string {
+// view draws the history screen, with footer in place of its own bottom
+// line when it is not empty.
+func (v *historyView) view(width, height int, footer string) string {
 	listHeight, previewHeight := historyPaneHeights(height)
+	if footer == "" {
+		footer = v.footer()
+	}
 	return v.listView(width, listHeight) + "\n" +
 		strings.Repeat("─", width) + "\n" +
 		v.messageView(width, previewHeight) + "\n" +
-		truncate(v.footer(), width)
+		truncate(footer, width)
 }
 
 func (v *historyView) footer() string {
