@@ -1,5 +1,19 @@
 # Changelog
 
+## [v4.0.0](https://github.com/yteraoka/ccr/compare/v3.4.1...v4.0.0) - 2026-11-20
+
+- Update module github.com/ncruces/go-sqlite3 to v0.37.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/120
+- Update module golang.org/x/text to v0.44.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/123
+- Update module charm.land/lipgloss/v2 to v2.1.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/122
+- Update dependency go to v1.27.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/124
+- Update module github.com/ikawaha/kagome/v2 to v2.11.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/126
+- Update module charm.land/lipgloss/v2 to v2.1.1 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/127
+- Update actions/setup-go action to v7.1.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/128
+- Update module github.com/charmbracelet/x/ansi to v0.11.10 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/130
+- Update module charm.land/bubbletea/v2 to v2.1.2 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/129
+- Update actions/create-github-app-token action to v3.4.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/131
+- Resume a session whose directory is gone in another folder by @yteraoka in https://github.com/yteraoka/ccr/pull/132
+
 ## [v3.4.1](https://github.com/yteraoka/ccr/compare/v3.4.0...v3.4.1) - 2026-11-03
 
 - Update Songmu/tagpr action to v1.21.4 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/114
