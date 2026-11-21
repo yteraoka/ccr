@@ -8,7 +8,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/ikawaha/kagome-dict/ipa v1.2.6
+	github.com/ikawaha/kagome-dict/ipa v1.2.7
 	github.com/ikawaha/kagome/v2 v2.11.1
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/ncruces/go-sqlite3 v0.38.0
@@ -25,7 +25,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
-	github.com/ikawaha/kagome-dict v1.1.7 // indirect
+	github.com/ikawaha/kagome-dict v1.1.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/ncruces/go-sqlite3-wasm/v6 v6.7.35401 // indirect
