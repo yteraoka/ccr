@@ -1,5 +1,10 @@
 # Changelog
 
+## [v4.0.1](https://github.com/yteraoka/ccr/compare/v4.0.0...v4.0.1) - 2026-11-21
+
+- Update module github.com/ncruces/go-sqlite3 to v0.38.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/133
+- Update module github.com/ikawaha/kagome-dict/ipa to v1.2.7 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/135
+
 ## [v4.0.0](https://github.com/yteraoka/ccr/compare/v3.4.1...v4.0.0) - 2026-11-20
 
 - Update module github.com/ncruces/go-sqlite3 to v0.37.0 by @renovate[bot] in https://github.com/yteraoka/ccr/pull/120
