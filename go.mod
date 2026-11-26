@@ -6,7 +6,7 @@ require (
 	charm.land/bubbletea/v2 v2.1.3
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/charmbracelet/x/ansi v0.11.10
+	github.com/charmbracelet/x/ansi v0.12.0
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/ikawaha/kagome-dict/ipa v1.2.7
 	github.com/ikawaha/kagome/v2 v2.11.1
